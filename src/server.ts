@@ -2,6 +2,7 @@ import express, { type Application, Request, Response, NextFunction } from 'expr
 import cors from 'cors';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
@@ -1272,7 +1273,18 @@ export function stopCanvasServer(): Promise<void> {
 }
 
 // Direct execution: `node dist/server.js` still works standalone
-if (fileURLToPath(import.meta.url) === process.argv[1]) {
+function isServerMainModule(): boolean {
+  try {
+    const ourPath = fs.realpathSync(fileURLToPath(import.meta.url));
+    const argPath = process.argv[1];
+    if (!argPath) return false;
+    return ourPath === fs.realpathSync(path.resolve(argPath));
+  } catch {
+    return false;
+  }
+}
+
+if (isServerMainModule()) {
   startCanvasServer().catch((err) => {
     logger.error('Failed to start canvas server:', err);
     process.exit(1);
