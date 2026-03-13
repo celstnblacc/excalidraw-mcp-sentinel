@@ -12,6 +12,10 @@ on:
         type: boolean
         default: false
 
+concurrency:
+  group: docker-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   IMAGE_NAME_MCP: sanjibdevnath/mcp-excalidraw-local
   IMAGE_NAME_CANVAS: sanjibdevnath/mcp-excalidraw-local-canvas

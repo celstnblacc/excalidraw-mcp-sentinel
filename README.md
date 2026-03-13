@@ -1,7 +1,7 @@
 # MCP Excalidraw Local
 
 [![CI](https://github.com/sanjibdevnathlabs/mcp-excalidraw-local/actions/workflows/ci.yml/badge.svg)](https://github.com/sanjibdevnathlabs/mcp-excalidraw-local/actions/workflows/ci.yml)
-[![Docker Build & Push](https://github.com/sanjibdevnathlabs/mcp-excalidraw-local/actions/workflows/docker.yml/badge.svg)](https://github.com/sanjibdevnathlabs/mcp-excalidraw-local/actions/workflows/docker.yml)
+[![Release & Publish](https://github.com/sanjibdevnathlabs/mcp-excalidraw-local/actions/workflows/release.yml/badge.svg)](https://github.com/sanjibdevnathlabs/mcp-excalidraw-local/actions/workflows/release.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A fully local, self-hosted Excalidraw MCP server with **SQLite persistence**, **multi-tenancy**, and **auto-sync** — designed to run entirely on your machine without depending on `excalidraw.com`.
