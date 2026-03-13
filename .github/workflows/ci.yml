@@ -63,13 +63,11 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Upload workspace
+      - name: Upload build output
         uses: actions/upload-artifact@v4
         with:
-          name: workspace
-          path: |
-            node_modules/
-            dist/
+          name: dist
+          path: dist/
           retention-days: 1
 
   test:
@@ -84,10 +82,11 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: Download workspace
-        uses: actions/download-artifact@v4
+      - name: Restore node_modules from cache
+        uses: actions/cache/restore@v4
         with:
-          name: workspace
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node20-${{ hashFiles('package-lock.json') }}
 
       - name: Run tests
         run: npm test
@@ -104,10 +103,11 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: Download workspace
-        uses: actions/download-artifact@v4
+      - name: Restore node_modules from cache
+        uses: actions/cache/restore@v4
         with:
-          name: workspace
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node20-${{ hashFiles('package-lock.json') }}
 
       - name: Type check
         run: npm run type-check
@@ -124,10 +124,17 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: Download workspace
+      - name: Restore node_modules from cache
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node20-${{ hashFiles('package-lock.json') }}
+
+      - name: Download build output
         uses: actions/download-artifact@v4
         with:
-          name: workspace
+          name: dist
+          path: dist/
 
       - name: Check build artifacts
         run: |
