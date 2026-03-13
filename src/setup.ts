@@ -107,10 +107,10 @@ async function phaseEnvironment(rl: readline.Interface): Promise<boolean> {
   // Node.js version
   const nodeVersion = process.version;
   const major = parseInt(nodeVersion.slice(1).split('.')[0] ?? '0', 10);
-  if (major >= 18) {
+  if (major >= 20) {
     ok(`Node.js ${nodeVersion} ${'.' .repeat(Math.max(0, 24 - nodeVersion.length))} OK`);
   } else {
-    fail(`Node.js ${nodeVersion} — requires >= 18.0.0`);
+    fail(`Node.js ${nodeVersion} — requires >= 20.0.0`);
     allOk = false;
   }
 
@@ -133,7 +133,6 @@ async function phaseEnvironment(rl: readline.Interface): Promise<boolean> {
         ok('Rebuild successful');
       } catch {
         fail('Rebuild failed. Try manually:');
-        info(`  cd ${path.resolve(__dirname, '..')}`);
         info('  npm rebuild better-sqlite3');
         info('');
         info('Prerequisites:');
@@ -142,7 +141,8 @@ async function phaseEnvironment(rl: readline.Interface): Promise<boolean> {
         } else if (process.platform === 'linux') {
           info('  sudo apt install build-essential python3');
         } else {
-          info('  npm install --global windows-build-tools');
+          info('  Install "Desktop development with C++" from Visual Studio Build Tools');
+          info('  https://visualstudio.microsoft.com/visual-cpp-build-tools/');
         }
         allOk = false;
       }
@@ -306,7 +306,11 @@ function mergeJsonConfig(configPath: string): void {
   let existing: any = {};
   if (fs.existsSync(configPath)) {
     const raw = fs.readFileSync(configPath, 'utf-8');
-    existing = JSON.parse(raw);
+    try {
+      existing = JSON.parse(raw);
+    } catch {
+      throw new Error(`Failed to parse ${configPath} — fix the JSON syntax and try again.`);
+    }
   }
 
   if (!existing.mcpServers) {
@@ -345,6 +349,11 @@ function printManualConfig(): void {
 // ── Main ─────────────────────────────────────────────────────
 
 export async function runSetup(): Promise<void> {
+  if (!process.stdin.isTTY) {
+    process.stderr.write('Error: Setup requires an interactive terminal. Run this command directly in your terminal (not piped or in CI).\n');
+    process.exit(1);
+  }
+
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,

@@ -2708,13 +2708,39 @@ if (process.env.DEBUG === 'true') {
   logger.debug('Debug mode enabled');
 }
 
-// Start the server if this file is run directly
-if (fileURLToPath(import.meta.url) === process.argv[1]) {
-  if (process.argv[2] === 'setup') {
+function isMainModule(): boolean {
+  try {
+    const ourPath = fs.realpathSync(fileURLToPath(import.meta.url));
+    const argPath = process.argv[1];
+    if (!argPath) return false;
+    return ourPath === fs.realpathSync(path.resolve(argPath));
+  } catch {
+    return false;
+  }
+}
+
+if (isMainModule()) {
+  const arg = process.argv[2];
+
+  if (arg === 'setup') {
     import('./setup.js').then(m => m.runSetup()).catch(error => {
       process.stderr.write(`Setup failed: ${(error as Error).message}\n`);
       process.exit(1);
     });
+  } else if (arg === '--help' || arg === '-h' || arg === '--version' || arg === '-v') {
+    const pkgPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      if (arg === '--help' || arg === '-h') {
+        process.stdout.write(`${pkg.name} v${pkg.version}\n\nUsage:\n  mcp-excalidraw-local          Start MCP server (stdio transport)\n  mcp-excalidraw-local setup     Interactive setup wizard\n  mcp-excalidraw-local --help    Show this help\n  mcp-excalidraw-local --version Show version\n`);
+      } else {
+        process.stdout.write(`${pkg.version}\n`);
+      }
+    } catch {
+      process.stderr.write('Could not read package.json\n');
+      process.exit(1);
+    }
+    process.exit(0);
   } else {
     runServer().catch(error => {
       logger.error('Failed to start server:', error);

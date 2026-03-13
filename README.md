@@ -58,7 +58,7 @@ Click the workspace badge to switch between isolated canvases — each workspace
 
 | Requirement | Why | Check |
 |---|---|---|
-| **Node.js >= 18** (LTS 20 or 22 recommended) | Runtime | `node --version` |
+| **Node.js >= 20** (LTS 20 or 22 recommended) | Runtime | `node --version` |
 | **C++ build tools** | `better-sqlite3` compiles native bindings | See below |
 | **npm** (bundled with Node.js) | Package manager | `npm --version` |
 
@@ -75,9 +75,7 @@ sudo apt install build-essential python3
 ```
 
 **Windows:**
-```bash
-npm install --global windows-build-tools
-```
+Install "Desktop development with C++" from [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
 
 > `better-sqlite3` ships prebuilt binaries for most Node LTS versions. The build tools are only needed when a prebuilt binary isn't available for your platform/Node combination.
 

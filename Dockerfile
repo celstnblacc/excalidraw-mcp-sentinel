@@ -2,7 +2,7 @@
 # Builds the MCP server with SQLite persistence
 
 # Stage 1: Build backend (TypeScript compilation + native modules)
-FROM node:18-slim AS builder
+FROM node:20-slim AS builder
 
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
@@ -16,7 +16,7 @@ COPY tsconfig.json ./
 RUN npm run build:server
 
 # Stage 2: Production MCP Server
-FROM node:18-slim AS production
+FROM node:20-slim AS production
 
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
