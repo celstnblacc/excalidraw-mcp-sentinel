@@ -15,6 +15,9 @@ public/dist/
 .cursor/
 .claude/
 
+# User preferences (only the example ships)
+skills/excalidraw-skill/preferences.json
+
 # Development artifacts
 *.excalidraw
 

@@ -94,16 +94,15 @@
 |---------|----------------|-----------------|
 | Shape labels | `"text": "My Label"` (auto-converts) | `"label": {"text": "My Label"}` |
 | Arrow binding | `"startElementId": "id"` / `"endElementId": "id"` | `"start": {"id": "id"}` / `"end": {"id": "id"}` |
-| `fontFamily` | String `"1"` or omit | String `"1"` or omit (never a number) |
+| `fontFamily` | Number or string — use value from user preferences (see Step 1 in SKILL.md) | String — use value from user preferences |
 | Tenant scoping | Auto (uses active tenant) | Include `X-Tenant-Id` header on every request |
 
 ### Element Creation Best Practices
 
-- **Always set `roughness: 0`** for clean, professional diagrams (default is hand-drawn).
-- **Always set `strokeWidth: 2`** on arrows for visibility.
+- **Always apply user preferences** — load from Step 1 in SKILL.md and apply `fontFamily`, `roughness`, `fontSize`, `strokeWidth` to every element.
 - **Create shapes first, arrows second** (two separate `batch_create_elements` calls).
 - **Assign custom `id`** to every shape so arrows can reference it.
-- **Size shapes for their text** — Virgil font is ~30% wider than standard. Use sizing formulas from SKILL.md.
+- **Size shapes for their text** — use sizing formulas from SKILL.md.
 - `points` accepts both `[[x,y]]` tuples and `[{x,y}]` objects — normalized automatically.
 - **Curved arrows**: Use `"roundness": {"type": 2}` with 3+ points. **Elbowed arrows**: Use `"elbowed": true`.
 

@@ -15,6 +15,79 @@ Run these checks **in order**:
 
 See `references/cheatsheet.md` for the full MCP-vs-REST mapping and REST API gotchas.
 
+## Step 1: Load User Preferences
+
+Before creating any elements, load the user's diagram preferences. These control default font, roughness, stroke width, etc.
+
+### Preference Resolution Order (most specific wins)
+
+| Priority | Scope | Location | Persists |
+|----------|-------|----------|----------|
+| 1 (highest) | Session | In-memory (set via prompt during this conversation) | No — current session only |
+| 2 | Folder | `.claude/excalidraw-preferences.json` in the current project root | Yes — per-project |
+| 3 | Global | `~/.claude/skills/excalidraw-skill/preferences.json` | Yes — all projects |
+| 4 (lowest) | Hardcoded | Server defaults (fontFamily: 1, roughness: 0, fontSize: 20, strokeWidth: 2) | — |
+
+### How to Load
+
+1. **Check folder-level first**: Read `.claude/excalidraw-preferences.json` from the current working directory (or project root). If it exists and has `defaults`, use those values.
+2. **Fall back to global**: Read `~/.claude/skills/excalidraw-skill/preferences.json`. If it exists and has `defaults`, use those values.
+3. **If neither exists** → run the **First-Time Setup** prompt below.
+4. **Merge**: Folder preferences override global; global overrides hardcoded. Only override fields that are explicitly set.
+
+### First-Time Setup (Interactive)
+
+If no preferences file exists at either location, **prompt the user before drawing anything**:
+
+> **Excalidraw Preferences Setup**
+>
+> I don't have any saved diagram preferences yet. Let me set up your defaults so every diagram looks the way you want.
+
+Ask these questions (use `AskUserQuestion` tool if available, otherwise ask inline):
+
+1. **Font family** — Which font for all text?
+   - Excalifont (hand-drawn) = 1
+   - Helvetica (sans-serif) = 2
+   - Cascadia (monospace) = 3
+   - Comic Shanns = 4
+   - Nunito = 6
+   - Lilita One = 7
+
+2. **Roughness** — Diagram style?
+   - Clean/professional (roughness: 0) — recommended
+   - Hand-drawn sketch (roughness: 1)
+   - Very rough (roughness: 2)
+
+3. **Scope** — Where to save?
+   - **This session only** — don't save to disk, just use for this conversation
+   - **This project** — save to `.claude/excalidraw-preferences.json` in project root
+   - **Global (all projects)** — save to `~/.claude/skills/excalidraw-skill/preferences.json`
+
+Then save the preferences JSON to the chosen location:
+
+```json
+{
+  "defaults": {
+    "fontFamily": <user_choice>,
+    "fontSize": 20,
+    "roughness": <user_choice>,
+    "strokeWidth": 2
+  }
+}
+```
+
+For session-only scope, just hold the values in memory and apply them to every element in this conversation.
+
+### Applying Preferences
+
+Once loaded, apply `defaults` to **every element** that supports the property:
+- `fontFamily` → all text-containing elements (text, rectangles with labels, diamonds, ellipses, arrows with labels)
+- `fontSize` → text elements and labels (unless the element explicitly overrides it)
+- `roughness` → all elements
+- `strokeWidth` → arrows and lines
+
+User-specified values in individual element calls always override preferences.
+
 ## Core Principles (Read Before Any Diagram)
 
 These principles were learned through extensive iterative use. Violating them produces bad diagrams.

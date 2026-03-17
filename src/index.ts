@@ -65,6 +65,47 @@ const CANVAS_PORT = process.env.CANVAS_PORT || process.env.PORT || '3000';
 const EXPRESS_SERVER_URL = process.env.EXPRESS_SERVER_URL || `http://localhost:${CANVAS_PORT}`;
 const ENABLE_CANVAS_SYNC = true;
 
+// User preferences for element defaults (font, roughness, etc.)
+// Resolution: folder-level .claude/excalidraw-preferences.json > global ~/.claude/skills/excalidraw-skill/preferences.json > hardcoded
+interface ExcalidrawPreferences {
+  fontFamily: number;
+  fontSize: number;
+  roughness: number;
+  strokeWidth: number;
+}
+
+const HARDCODED_DEFAULTS: ExcalidrawPreferences = {
+  fontFamily: 1,
+  fontSize: 20,
+  roughness: 0,
+  strokeWidth: 2,
+};
+
+function loadPreferences(): ExcalidrawPreferences {
+  const locations = [
+    path.join(process.cwd(), '.claude', 'excalidraw-preferences.json'),
+    path.join(process.env.HOME || '~', '.claude', 'skills', 'excalidraw-skill', 'preferences.json'),
+  ];
+
+  for (const loc of locations) {
+    try {
+      if (fs.existsSync(loc)) {
+        const raw = JSON.parse(fs.readFileSync(loc, 'utf-8'));
+        if (raw?.defaults) {
+          logger.info(`Loaded user preferences from ${loc}`);
+          return { ...HARDCODED_DEFAULTS, ...raw.defaults };
+        }
+      }
+    } catch (e) {
+      logger.warn(`Failed to read preferences from ${loc}: ${e}`);
+    }
+  }
+
+  return HARDCODED_DEFAULTS;
+}
+
+const USER_PREFS = loadPreferences();
+
 // One-time tokens for clear_canvas confirmation (token → expiry timestamp)
 const pendingClearTokens = new Map<string, { expiresAt: number; elementCount: number }>();
 const CLEAR_TOKEN_TTL_MS = 120_000; // 2 minutes
@@ -2199,8 +2240,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           if (el.type === 'text') {
             base.text = text ?? '';
             base.originalText = text ?? '';
-            base.fontSize = rest.fontSize ?? 20;
-            base.fontFamily = rest.fontFamily ?? 1;
+            base.fontSize = rest.fontSize ?? USER_PREFS.fontSize;
+            base.fontFamily = rest.fontFamily ?? USER_PREFS.fontFamily;
             base.textAlign = rest.textAlign ?? 'center';
             base.verticalAlign = rest.verticalAlign ?? 'middle';
             base.autoResize = rest.autoResize ?? true;
@@ -2294,8 +2335,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
               locked: false,
               text: labelText,
               originalText: labelText,
-              fontSize: isArrow ? 14 : (rest.fontSize ?? 16),
-              fontFamily: rest.fontFamily ?? 1,
+              fontSize: isArrow ? 14 : (rest.fontSize ?? USER_PREFS.fontSize),
+              fontFamily: rest.fontFamily ?? USER_PREFS.fontFamily,
               textAlign: 'center',
               verticalAlign: 'middle',
               autoResize: true,
