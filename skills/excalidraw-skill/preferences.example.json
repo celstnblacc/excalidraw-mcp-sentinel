@@ -1,16 +1,8 @@
 {
   "_comment": "Excalidraw MCP user preferences. Copy to preferences.json to activate.",
-  "_fontReference": {
-    "1": "Excalifont (hand-drawn)",
-    "2": "Helvetica (sans-serif)",
-    "3": "Cascadia (monospace)",
-    "4": "Comic Shanns",
-    "5": "Liberation Sans",
-    "6": "Nunito",
-    "7": "Lilita One"
-  },
+  "_fontReference": "See src/font-families.json for canonical font ID → name mapping.",
   "defaults": {
-    "fontFamily": 1,
+    "fontFamily": 5,
     "fontSize": 20,
     "roughness": 0,
     "strokeWidth": 2

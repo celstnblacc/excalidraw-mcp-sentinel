@@ -27,7 +27,9 @@ import {
   ExcalidrawElementType,
   validateElement,
   normalizeFontFamily,
-  files as globalFiles
+  files as globalFiles,
+  DEFAULT_FONT_FAMILY,
+  FONT_FAMILY_DESCRIPTION,
 } from './types.js';
 import fetch from 'node-fetch';
 import { startCanvasServer, stopCanvasServer } from './server.js';
@@ -75,7 +77,7 @@ interface ExcalidrawPreferences {
 }
 
 const HARDCODED_DEFAULTS: ExcalidrawPreferences = {
-  fontFamily: 1,
+  fontFamily: DEFAULT_FONT_FAMILY,
   fontSize: 20,
   roughness: 0,
   strokeWidth: 2,
@@ -459,7 +461,7 @@ const tools: Tool[] = [
         opacity: { type: 'number' },
         text: { type: 'string' },
         fontSize: { type: 'number' },
-        fontFamily: { type: ['string', 'number'], description: 'Font family: 1=Excalifont (hand-drawn), 2=Helvetica (sans-serif), 3=Cascadia (monospace), 4=Comic Shanns, 5=Liberation Sans, 6=Nunito, 7=Lilita One. Accepts name strings too.' },
+        fontFamily: { type: ['string', 'number'], description: FONT_FAMILY_DESCRIPTION },
         startElementId: { type: 'string', description: 'For arrows: ID of the element to bind the arrow start to. Arrow auto-routes to element edge.' },
         endElementId: { type: 'string', description: 'For arrows: ID of the element to bind the arrow end to. Arrow auto-routes to element edge.' },
         endArrowhead: { type: 'string', description: 'Arrowhead style at end: arrow, bar, dot, triangle, or null' },
@@ -690,7 +692,7 @@ const tools: Tool[] = [
               opacity: { type: 'number' },
               text: { type: 'string' },
               fontSize: { type: 'number' },
-              fontFamily: { type: ['string', 'number'], description: 'Font family: 1=Excalifont, 2=Helvetica, 3=Cascadia, 4=Comic Shanns, 5=Liberation Sans, 6=Nunito, 7=Lilita One. Accepts name strings too.' },
+              fontFamily: { type: ['string', 'number'], description: FONT_FAMILY_DESCRIPTION },
               startElementId: { type: 'string', description: 'For arrows: ID of element to bind arrow start to' },
               endElementId: { type: 'string', description: 'For arrows: ID of element to bind arrow end to' },
               endArrowhead: { type: 'string', description: 'Arrowhead style at end: arrow, bar, dot, triangle, or null' },

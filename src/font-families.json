@@ -1,0 +1,13 @@
+{
+  "fonts": [
+    { "id": 5, "name": "Excalifont", "label": "Excalifont (hand-drawn)", "aliases": ["excalifont", "hand-drawn"] },
+    { "id": 2, "name": "Helvetica", "label": "Helvetica (sans-serif)", "aliases": ["helvetica", "arial", "sans-serif"] },
+    { "id": 3, "name": "Cascadia",  "label": "Cascadia (monospace)",    "aliases": ["cascadia", "monospace", "courier"] },
+    { "id": 8, "name": "Comic Shanns", "label": "Comic Shanns",         "aliases": ["comic shanns", "comic sans"] },
+    { "id": 6, "name": "Nunito",    "label": "Nunito",                   "aliases": ["nunito"] },
+    { "id": 7, "name": "Lilita One", "label": "Lilita One",              "aliases": ["lilita one"] },
+    { "id": 9, "name": "Liberation Sans", "label": "Liberation Sans",    "aliases": ["liberation sans"], "legacy": true },
+    { "id": 1, "name": "Virgil",    "label": "Virgil (legacy)",          "aliases": ["virgil"], "legacy": true }
+  ],
+  "defaultFontFamily": 5
+}

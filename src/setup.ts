@@ -13,6 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { execSync } from 'child_process';
+import { FONT_FAMILIES, DEFAULT_FONT_FAMILY } from './types.js';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -184,14 +185,10 @@ async function phaseEnvironment(rl: readline.Interface): Promise<boolean> {
 
 // ── Preference Setup ─────────────────────────────────────────
 
-const FONT_OPTIONS: { value: number; label: string }[] = [
-  { value: 1, label: 'Excalifont (hand-drawn)' },
-  { value: 2, label: 'Helvetica (sans-serif)' },
-  { value: 3, label: 'Cascadia (monospace)' },
-  { value: 4, label: 'Comic Shanns' },
-  { value: 6, label: 'Nunito' },
-  { value: 7, label: 'Lilita One' },
-];
+// Derived from FONT_FAMILIES in types.ts — single source of truth
+const FONT_OPTIONS = FONT_FAMILIES
+  .filter(f => !f.legacy)
+  .map(f => ({ value: f.id, label: f.label }));
 
 const ROUGHNESS_OPTIONS: { value: number; label: string }[] = [
   { value: 0, label: 'Clean / professional' },
@@ -245,12 +242,12 @@ async function phasePreferences(rl: readline.Interface, phaseLabel: string): Pro
   // Font
   process.stdout.write('\n  Font family:\n');
   FONT_OPTIONS.forEach((f, i) => {
-    const marker = f.value === 1 ? ' (default)' : '';
+    const marker = f.value === DEFAULT_FONT_FAMILY ? ' (default)' : '';
     process.stdout.write(`    ${CYAN}[${i + 1}]${RESET} ${f.label}${marker}\n`);
   });
   const fontAnswer = (await ask(rl, 'Choose [1]: ')).trim();
   const fontIdx = fontAnswer === '' ? 0 : parseInt(fontAnswer, 10) - 1;
-  const fontFamily = (fontIdx >= 0 && fontIdx < FONT_OPTIONS.length) ? FONT_OPTIONS[fontIdx]!.value : 1;
+  const fontFamily = (fontIdx >= 0 && fontIdx < FONT_OPTIONS.length) ? FONT_OPTIONS[fontIdx]!.value : DEFAULT_FONT_FAMILY;
 
   // Roughness
   process.stdout.write('\n  Diagram style:\n');

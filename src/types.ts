@@ -311,24 +311,36 @@ export interface ExcalidrawFile {
 // In-memory file storage (image files are too large for SQLite row storage)
 export const files = new Map<string, ExcalidrawFile>();
 
-// Font family normalization: Excalidraw expects numeric IDs, but agents
-// often send string names. Map common names to their numeric equivalents.
-const FONT_FAMILY_MAP: Record<string, number> = {
-  'virgil': 1,
-  'hand-drawn': 1,
-  'excalifont': 1,
-  'helvetica': 2,
-  'arial': 2,
-  'sans-serif': 2,
-  'cascadia': 3,
-  'monospace': 3,
-  'courier': 3,
-  'comic shanns': 4,
-  'comic sans': 4,
-  'liberation sans': 5,
-  'nunito': 6,
-  'lilita one': 7,
-};
+// ── Font families — single source of truth ──────────────────────────────
+// IDs match the @excalidraw/excalidraw FONT_FAMILY constant.
+// The canonical data lives in font-families.json; every other file derives from it.
+import fontData from './font-families.json' with { type: 'json' };
+
+export interface FontFamilyDef {
+  id: number;
+  name: string;
+  label: string;
+  aliases: string[];
+  legacy?: boolean;         // hidden from setup menus / tool docs
+}
+
+export const FONT_FAMILIES: FontFamilyDef[] = fontData.fonts as FontFamilyDef[];
+
+export const DEFAULT_FONT_FAMILY: number = fontData.defaultFontFamily;
+
+// Derived: description string for MCP tool schemas
+export const FONT_FAMILY_DESCRIPTION =
+  'Font family: ' +
+  FONT_FAMILIES.filter(f => !f.legacy).map(f => `${f.id}=${f.name}`).join(', ') +
+  '. Accepts name strings too.';
+
+// Derived: string → number mapping for normalization
+const FONT_FAMILY_MAP: Record<string, number> = {};
+for (const font of FONT_FAMILIES) {
+  for (const alias of font.aliases) {
+    FONT_FAMILY_MAP[alias] = font.id;
+  }
+}
 
 export function normalizeFontFamily(value: string | number | undefined): number | undefined {
   if (value === undefined || value === null) return undefined;

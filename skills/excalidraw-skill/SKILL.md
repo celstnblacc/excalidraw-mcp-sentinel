@@ -26,7 +26,7 @@ Before creating any elements, load the user's diagram preferences. These control
 | 1 (highest) | Session | In-memory (set via prompt during this conversation) | No — current session only |
 | 2 | Folder | `.claude/excalidraw-preferences.json` in the current project root | Yes — per-project |
 | 3 | Global | `~/.claude/skills/excalidraw-skill/preferences.json` | Yes — all projects |
-| 4 (lowest) | Hardcoded | Server defaults (fontFamily: 1, roughness: 0, fontSize: 20, strokeWidth: 2) | — |
+| 4 (lowest) | Hardcoded | Server defaults (fontFamily: 5, roughness: 0, fontSize: 20, strokeWidth: 2) | — |
 
 ### How to Load
 
@@ -45,11 +45,11 @@ If no preferences file exists at either location, **prompt the user before drawi
 
 Ask these questions (use `AskUserQuestion` tool if available, otherwise ask inline):
 
-1. **Font family** — Which font for all text?
-   - Excalifont (hand-drawn) = 1
+1. **Font family** — Which font for all text? _(IDs from `src/font-families.json`)_
+   - Excalifont (hand-drawn) = 5
    - Helvetica (sans-serif) = 2
    - Cascadia (monospace) = 3
-   - Comic Shanns = 4
+   - Comic Shanns = 8
    - Nunito = 6
    - Lilita One = 7
 
