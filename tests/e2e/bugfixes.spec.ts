@@ -1,9 +1,19 @@
 import { test, expect } from '@playwright/test';
 
-const API = 'http://localhost:3100';
+const API = 'http://127.0.0.1:3100';
+
+async function resetCanvas(request: any): Promise<void> {
+  const listRes = await request.get(`${API}/api/elements`);
+  const listBody = await listRes.json();
+  await Promise.all(
+    (listBody.elements ?? []).map((element: { id: string }) =>
+      request.delete(`${API}/api/elements/${element.id}`)
+    )
+  );
+}
 
 test.beforeEach(async ({ request }) => {
-  await request.delete(`${API}/api/elements/clear`);
+  await resetCanvas(request);
 });
 
 // ─── Fix 3: Hello handshake → real-time sync works immediately ──

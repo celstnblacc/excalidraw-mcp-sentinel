@@ -196,7 +196,10 @@ export type WebSocketMessageType =
   | 'file_deleted'
   | 'hello'
   | 'hello_ack'
-  | 'ack';
+  | 'ack'
+  | 'auth_required'
+  | 'auth_failed'
+  | 'error';
 
 // Connection registry types
 export interface ClientConnection {
@@ -215,8 +218,9 @@ export interface BroadcastResult {
 
 export interface HelloMessage extends WebSocketMessage {
   type: 'hello';
-  tenantId: string;
-  projectId: string;
+  tenantId?: string;
+  projectId?: string;
+  apiKey?: string;
 }
 
 export interface HelloAckMessage extends WebSocketMessage {
@@ -224,6 +228,11 @@ export interface HelloAckMessage extends WebSocketMessage {
   tenantId: string;
   projectId: string;
   elements: ServerElement[];
+  tenant?: {
+    id: string;
+    name: string;
+    workspace_path: string;
+  };
 }
 
 export interface AckMessage extends WebSocketMessage {

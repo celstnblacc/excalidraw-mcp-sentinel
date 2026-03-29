@@ -173,7 +173,7 @@ describe('DELETE /api/elements/clear', () => {
     setElement('a', makeElement({ id: 'a' }));
     setElement('b', makeElement({ id: 'b' }));
 
-    const res = await request(app).delete('/api/elements/clear');
+    const res = await request(app).delete('/api/elements/clear?confirm=true');
     expect(res.status).toBe(200);
     expect(res.body.count).toBe(2);
 
@@ -182,7 +182,7 @@ describe('DELETE /api/elements/clear', () => {
   });
 
   it('returns 0 count when already empty', async () => {
-    const res = await request(app).delete('/api/elements/clear');
+    const res = await request(app).delete('/api/elements/clear?confirm=true');
     expect(res.body.count).toBe(0);
   });
 });

@@ -512,6 +512,10 @@ export function getActiveTenant(): Tenant {
   return db.prepare('SELECT * FROM tenants WHERE id = ?').get(activeTenantId) as Tenant;
 }
 
+export function getTenantById(id: string): Tenant | undefined {
+  return db.prepare('SELECT * FROM tenants WHERE id = ?').get(id) as Tenant | undefined;
+}
+
 export function getActiveTenantId(): string {
   return activeTenantId;
 }
@@ -533,6 +537,12 @@ export function createProject(name: string, description?: string): Project {
 
 export function listProjects(): Project[] {
   return db.prepare('SELECT * FROM projects WHERE tenant_id = ? ORDER BY updated_at DESC').all(activeTenantId) as Project[];
+}
+
+export function getProjectForTenant(projectId: string, tenantId: string): Project | undefined {
+  return db.prepare(
+    'SELECT * FROM projects WHERE id = ? AND tenant_id = ?'
+  ).get(projectId, tenantId) as Project | undefined;
 }
 
 export function setActiveProject(id: string): void {

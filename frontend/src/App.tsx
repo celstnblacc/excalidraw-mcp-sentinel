@@ -53,11 +53,21 @@ interface TenantInfo {
   workspace_path: string;
 }
 
+declare global {
+  interface Window {
+    __EXCALIDRAW_API_KEY__?: string;
+  }
+}
+
+const WS_AUTH_CLOSE_CODE = 4001
+const browserApiKey = typeof window !== 'undefined' ? window.__EXCALIDRAW_API_KEY__ : undefined
+
 function App(): JSX.Element {
   const [excalidrawAPI, setExcalidrawAPI] = useState<ExcalidrawAPIRefValue | null>(null)
   const excalidrawAPIRef = useRef<ExcalidrawAPIRefValue | null>(null)
   const [isConnected, setIsConnected] = useState<boolean>(false)
   const websocketRef = useRef<WebSocket | null>(null)
+  const reconnectEnabledRef = useRef<boolean>(true)
   
   // Sync state
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
@@ -101,6 +111,7 @@ function App(): JSX.Element {
     }
     const tid = activeTenantIdRef.current
     if (tid) headers['X-Tenant-Id'] = tid
+    if (browserApiKey) headers['X-API-Key'] = browserApiKey
     return headers
   }
 
@@ -244,6 +255,9 @@ function App(): JSX.Element {
   }
 
   const connectWebSocket = (): void => {
+    if (!reconnectEnabledRef.current) {
+      return
+    }
     if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
       return
     }
@@ -274,7 +288,7 @@ function App(): JSX.Element {
       setIsConnected(false)
       
       // Reconnect after 3 seconds if not a clean close
-      if (event.code !== 1000) {
+      if (event.code !== 1000 && event.code !== WS_AUTH_CLOSE_CODE && reconnectEnabledRef.current) {
         setTimeout(connectWebSocket, 3000)
       }
     }
@@ -285,10 +299,13 @@ function App(): JSX.Element {
     }
   }
 
-  const sendHello = (tenantId: string): void => {
+  const sendHello = (tenantId?: string): void => {
     const ws = websocketRef.current
     if (!ws || ws.readyState !== WebSocket.OPEN) return
-    ws.send(JSON.stringify({ type: 'hello', tenantId }))
+    const message: Record<string, string> = { type: 'hello' }
+    if (tenantId) message.tenantId = tenantId
+    if (browserApiKey) message.apiKey = browserApiKey
+    ws.send(JSON.stringify(message))
   }
 
   const sendAck = (msgId: string | undefined, status: 'applied' | 'partial' | 'failed', elementCount?: number, expectedCount?: number): void => {
@@ -358,6 +375,85 @@ function App(): JSX.Element {
   }
 
   const handleWebSocketMessage = async (data: WebSocketMessage): Promise<void> => {
+    switch (data.type) {
+      case 'auth_required':
+        sendHello(activeTenantIdRef.current ?? undefined)
+        return
+
+      case 'auth_failed':
+        reconnectEnabledRef.current = false
+        showToast('Authentication failed - check EXCALIDRAW_API_KEY', 4000)
+        if (websocketRef.current?.readyState === WebSocket.OPEN) {
+          websocketRef.current.close(WS_AUTH_CLOSE_CODE, 'Authentication failed')
+        }
+        return
+
+      case 'error':
+        if (typeof data.message === 'string' && data.message) {
+          showToast(data.message, 4000)
+        }
+        return
+
+      case 'tenant_switched': {
+        console.log('Tenant switched:', data.tenant)
+        if (!data.tenant) return
+        const incoming = data.tenant as TenantInfo
+        sendHello(incoming.id)
+        if (incoming.id !== activeTenantIdRef.current) {
+          activeTenantIdRef.current = incoming.id
+          setActiveTenant(incoming)
+          const api = excalidrawAPIRef.current
+          if (!api) return
+          api.updateScene({
+            elements: [],
+            captureUpdate: CaptureUpdateAction.NEVER
+          })
+          lastSyncedHashRef.current = ''
+          loadExistingElements()
+        } else {
+          setActiveTenant(incoming)
+        }
+        return
+      }
+
+      case 'hello_ack': {
+        console.log('Hello acknowledged by server:', data.tenantId, data.projectId)
+        if (data.tenant) {
+          const incoming = data.tenant as TenantInfo
+          activeTenantIdRef.current = incoming.id
+          setActiveTenant(incoming)
+        } else if (typeof data.tenantId === 'string') {
+          activeTenantIdRef.current = data.tenantId
+        }
+
+        const api = excalidrawAPIRef.current
+        if (!api) return
+
+        if (Array.isArray(data.elements) && data.elements.length > 0) {
+          const cleanedElements = data.elements.map(cleanElementForExcalidraw)
+          const validatedElements = validateAndFixBindings(cleanedElements)
+          const convertedElements = convertElementsPreservingImageProps(validatedElements)
+          api.updateScene({
+            elements: convertedElements,
+            captureUpdate: CaptureUpdateAction.NEVER
+          })
+          const helloBaseline = new Map<string, any>()
+          for (const el of data.elements) {
+            helloBaseline.set(el.id, el)
+          }
+          lastSyncedElementsRef.current = helloBaseline
+        } else if (Array.isArray(data.elements)) {
+          api.updateScene({
+            elements: [],
+            captureUpdate: CaptureUpdateAction.NEVER
+          })
+          lastSyncedElementsRef.current = new Map()
+          lastSyncedHashRef.current = ''
+        }
+        return
+      }
+    }
+
     // Gap detection (Task 12): if a message carries sync_version, check for gaps
     if (data.sync_version !== undefined && typeof data.sync_version === 'number') {
       const expected = lastReceivedSyncVersionRef.current + 1
@@ -714,46 +810,6 @@ function App(): JSX.Element {
         case 'file_deleted':
           break
 
-        case 'tenant_switched':
-          console.log('Tenant switched:', data.tenant)
-          if (data.tenant) {
-            const incoming = data.tenant as TenantInfo
-            // Send hello to register WS connection under the correct tenant scope
-            sendHello(incoming.id)
-            if (incoming.id !== activeTenantIdRef.current) {
-              activeTenantIdRef.current = incoming.id
-              setActiveTenant(incoming)
-              api.updateScene({
-                elements: [],
-                captureUpdate: CaptureUpdateAction.NEVER
-              })
-              lastSyncedHashRef.current = ''
-              loadExistingElements()
-            } else {
-              setActiveTenant(incoming)
-            }
-          }
-          break
-
-        case 'hello_ack':
-          console.log('Hello acknowledged by server:', data.tenantId, data.projectId)
-          if (data.elements && Array.isArray(data.elements) && data.elements.length > 0) {
-            const converted = convertToExcalidrawElements(data.elements)
-            api.updateScene({
-              elements: converted,
-              captureUpdate: CaptureUpdateAction.NEVER
-            })
-            // Update sync baseline for deletion detection
-            const helloBaseline = new Map<string, any>()
-            for (const el of data.elements) {
-              helloBaseline.set(el.id, el)
-            }
-            lastSyncedElementsRef.current = helloBaseline
-          } else if (data.elements && data.elements.length === 0) {
-            lastSyncedElementsRef.current = new Map()
-          }
-          break
-
         default:
           console.log('Unknown WebSocket message type:', data.type)
       }
@@ -875,10 +931,7 @@ function App(): JSX.Element {
 
       // Load elements for the newly-active tenant
       const elemRes = await fetch('/api/elements', {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Tenant-Id': tenantId
-        }
+        headers: tenantHeaders({ 'X-Tenant-Id': tenantId })
       })
       const result: ApiResponse = await elemRes.json()
       if (result.success && result.elements && result.elements.length > 0) {
@@ -996,7 +1049,7 @@ function App(): JSX.Element {
 
   // Load "skip confirm" preference from backend on mount
   useEffect(() => {
-    fetch('/api/settings/clear_canvas_skip_confirm')
+    fetch('/api/settings/clear_canvas_skip_confirm', { headers: tenantHeaders() })
       .then(r => r.json())
       .then(data => {
         if (data.value === 'true') setClearSkipConfirm(true)

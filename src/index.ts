@@ -137,11 +137,16 @@ interface SyncResponse {
 }
 
 function canvasHeaders(extra?: Record<string, string>): Record<string, string> {
-  return {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-Tenant-Id': dbGetActiveTenantId(),
     ...extra
   };
+  // Forward API key to canvas when auth is enabled — required for two-service
+  // Docker deployments where canvas runs with EXCALIDRAW_API_KEY set.
+  const apiKey = process.env.EXCALIDRAW_API_KEY;
+  if (apiKey) headers['X-API-Key'] = apiKey;
+  return headers;
 }
 
 // Helper functions to sync with Express server (canvas)

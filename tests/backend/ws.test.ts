@@ -198,7 +198,7 @@ describe('WebSocket broadcasts', () => {
 
     const clearedPromise = waitForMessageOfType(ws, 'canvas_cleared');
 
-    await fetch(`http://localhost:${port}/api/elements/clear`, { method: 'DELETE' });
+    await fetch(`http://localhost:${port}/api/elements/clear?confirm=true`, { method: 'DELETE' });
 
     const msg = await clearedPromise;
     expect(msg.type).toBe('canvas_cleared');

@@ -8,6 +8,7 @@ import fs from 'fs';
 
 let dbPath: string;
 let app: any;
+let clientCounter = 0;
 
 function makeElement(overrides: Partial<ServerElement> = {}): ServerElement {
   return {
@@ -22,12 +23,34 @@ function makeElement(overrides: Partial<ServerElement> = {}): ServerElement {
   };
 }
 
+function nextClientIp(): string {
+  clientCounter += 1;
+  const third = Math.floor(clientCounter / 255);
+  const fourth = (clientCounter % 255) || 1;
+  return `10.42.${third}.${fourth}`;
+}
+
+function postSyncV2(body: Record<string, unknown>, clientIp = nextClientIp()) {
+  return request(app)
+    .post('/api/elements/sync/v2')
+    .set('X-Forwarded-For', clientIp)
+    .send(body);
+}
+
+function postLegacySync(body: Record<string, unknown>, clientIp = nextClientIp()) {
+  return request(app)
+    .post('/api/elements/sync')
+    .set('X-Forwarded-For', clientIp)
+    .send(body);
+}
+
 beforeEach(async () => {
   dbPath = path.join(os.tmpdir(), `excalidraw-sync-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
   initDb(dbPath);
   setActiveTenant('default');
   const mod = await import('../../src/server.js');
   app = mod.default;
+  app.set('trust proxy', 1);
 });
 
 afterEach(() => {
@@ -47,9 +70,7 @@ describe('Delta sync v2 - deletion flows', () => {
 
     const v0 = getCurrentSyncVersion();
 
-    const res = await request(app)
-      .post('/api/elements/sync/v2')
-      .send({
+    const res = await postSyncV2({
         lastSyncVersion: v0,
         changes: [
           { id: 'a', action: 'delete' },
@@ -73,9 +94,7 @@ describe('Delta sync v2 - deletion flows', () => {
 
     const v0 = getCurrentSyncVersion();
 
-    const res = await request(app)
-      .post('/api/elements/sync/v2')
-      .send({
+    const res = await postSyncV2({
         lastSyncVersion: v0,
         changes: [
           { id: 'x', action: 'delete' },
@@ -89,9 +108,7 @@ describe('Delta sync v2 - deletion flows', () => {
   });
 
   it('delete for non-existent element does not crash', async () => {
-    const res = await request(app)
-      .post('/api/elements/sync/v2')
-      .send({
+    const res = await postSyncV2({
         lastSyncVersion: 0,
         changes: [{ id: 'ghost', action: 'delete' }],
       });
@@ -106,9 +123,7 @@ describe('Delta sync v2 - deletion flows', () => {
 
     const v0 = getCurrentSyncVersion();
 
-    await request(app)
-      .post('/api/elements/sync/v2')
-      .send({
+    await postSyncV2({
         lastSyncVersion: v0,
         changes: [{ id: 'persist-1', action: 'delete' }],
       });
@@ -125,9 +140,7 @@ describe('Delta sync v2 - deletion flows', () => {
     const v0 = getCurrentSyncVersion();
 
     // Simulate: frontend syncs deletions
-    await request(app)
-      .post('/api/elements/sync/v2')
-      .send({
+    await postSyncV2({
         lastSyncVersion: v0,
         changes: [
           { id: 'reload-1', action: 'delete' },
@@ -153,9 +166,7 @@ describe('Delta sync v2 - mixed operations', () => {
 
     const v0 = getCurrentSyncVersion();
 
-    const res = await request(app)
-      .post('/api/elements/sync/v2')
-      .send({
+    const res = await postSyncV2({
         lastSyncVersion: v0,
         changes: [
           { id: 'a', action: 'delete' },
@@ -181,9 +192,7 @@ describe('Delta sync v2 - mixed operations', () => {
     const v0 = getCurrentSyncVersion();
 
     // Delete it
-    await request(app)
-      .post('/api/elements/sync/v2')
-      .send({
+    await postSyncV2({
         lastSyncVersion: v0,
         changes: [{ id: 'revive', action: 'delete' }],
       });
@@ -192,9 +201,7 @@ describe('Delta sync v2 - mixed operations', () => {
 
     // Re-create it
     const v1 = getCurrentSyncVersion();
-    await request(app)
-      .post('/api/elements/sync/v2')
-      .send({
+    await postSyncV2({
         lastSyncVersion: v1,
         changes: [{ id: 'revive', action: 'upsert', element: makeElement({ id: 'revive', x: 999 }) }],
       });
@@ -215,9 +222,7 @@ describe('Delta sync v2 - bidirectional sync', () => {
     setElement('mcp-2', makeElement({ id: 'mcp-2' }));
 
     // Client syncs from version 0 with its own new element
-    const res = await request(app)
-      .post('/api/elements/sync/v2')
-      .send({
+    const res = await postSyncV2({
         lastSyncVersion: 0,
         changes: [
           { id: 'fe-1', action: 'upsert', element: makeElement({ id: 'fe-1' }) },
@@ -241,9 +246,7 @@ describe('Delta sync v2 - bidirectional sync', () => {
     const v1 = getCurrentSyncVersion();
 
     // Client syncs from before the delete
-    const res = await request(app)
-      .post('/api/elements/sync/v2')
-      .send({ lastSyncVersion: v0, changes: [] });
+    const res = await postSyncV2({ lastSyncVersion: v0, changes: [] });
 
     const deleteChange = res.body.serverChanges.find((c: any) => c.id === 'srv-del');
     expect(deleteChange).toBeDefined();
@@ -253,9 +256,7 @@ describe('Delta sync v2 - bidirectional sync', () => {
   it('excludes client-sent IDs from serverChanges', async () => {
     setElement('shared', makeElement({ id: 'shared', x: 0 }));
 
-    const res = await request(app)
-      .post('/api/elements/sync/v2')
-      .send({
+    const res = await postSyncV2({
         lastSyncVersion: 0,
         changes: [
           { id: 'shared', action: 'upsert', element: makeElement({ id: 'shared', x: 50 }) },
@@ -273,9 +274,7 @@ describe('Delta sync v2 - bidirectional sync', () => {
 describe('Delta sync v2 - multiple rounds', () => {
   it('tracks sync version across multiple sync rounds', async () => {
     // Round 1: create elements
-    const r1 = await request(app)
-      .post('/api/elements/sync/v2')
-      .send({
+    const r1 = await postSyncV2({
         lastSyncVersion: 0,
         changes: [
           { id: 'r1-a', action: 'upsert', element: makeElement({ id: 'r1-a' }) },
@@ -287,9 +286,7 @@ describe('Delta sync v2 - multiple rounds', () => {
     const v1 = r1.body.currentSyncVersion;
 
     // Round 2: update one, delete one, create one
-    const r2 = await request(app)
-      .post('/api/elements/sync/v2')
-      .send({
+    const r2 = await postSyncV2({
         lastSyncVersion: v1,
         changes: [
           { id: 'r1-a', action: 'upsert', element: makeElement({ id: 'r1-a', x: 999 }) },
@@ -315,9 +312,7 @@ describe('Delta sync v2 - multiple rounds', () => {
     setElement('existing', makeElement({ id: 'existing' }));
     const v0 = getCurrentSyncVersion();
 
-    const res = await request(app)
-      .post('/api/elements/sync/v2')
-      .send({ lastSyncVersion: v0, changes: [] });
+    const res = await postSyncV2({ lastSyncVersion: v0, changes: [] });
 
     expect(res.body.success).toBe(true);
     expect(res.body.appliedCount).toBe(0);
@@ -337,18 +332,14 @@ describe('Sync version monotonicity', () => {
     versions.push(getCurrentSyncVersion());
 
     // Update via sync
-    await request(app)
-      .post('/api/elements/sync/v2')
-      .send({
+    await postSyncV2({
         lastSyncVersion: 0,
         changes: [{ id: 'mono-a', action: 'upsert', element: makeElement({ id: 'mono-a', x: 50 }) }],
       });
     versions.push(getCurrentSyncVersion());
 
     // Delete via sync
-    await request(app)
-      .post('/api/elements/sync/v2')
-      .send({
+    await postSyncV2({
         lastSyncVersion: versions[versions.length - 1],
         changes: [{ id: 'mono-a', action: 'delete' }],
       });
@@ -396,9 +387,7 @@ describe('Sync version monotonicity', () => {
 describe('Concurrent sync requests', () => {
   it('parallel sync requests all complete without data loss', async () => {
     const promises = Array.from({ length: 5 }, (_, i) =>
-      request(app)
-        .post('/api/elements/sync/v2')
-        .send({
+      postSyncV2({
           lastSyncVersion: 0,
           changes: [
             { id: `par-${i}`, action: 'upsert', element: makeElement({ id: `par-${i}`, x: i * 100 }) },
@@ -423,9 +412,7 @@ describe('Concurrent sync requests', () => {
     const v0 = getCurrentSyncVersion();
 
     const promises = Array.from({ length: 5 }, (_, i) =>
-      request(app)
-        .post('/api/elements/sync/v2')
-        .send({
+      postSyncV2({
           lastSyncVersion: v0,
           changes: [{ id: `pd-${i}`, action: 'delete' }],
         })
@@ -442,14 +429,12 @@ describe('Sync after clear', () => {
   it('elements created after clear persist correctly', async () => {
     setElement('pre-clear', makeElement({ id: 'pre-clear' }));
 
-    await request(app).delete('/api/elements/clear');
+    await request(app).delete('/api/elements/clear?confirm=true');
     expect(getAllElements()).toHaveLength(0);
 
     const v0 = getCurrentSyncVersion();
 
-    const res = await request(app)
-      .post('/api/elements/sync/v2')
-      .send({
+    const res = await postSyncV2({
         lastSyncVersion: v0,
         changes: [
           { id: 'post-clear', action: 'upsert', element: makeElement({ id: 'post-clear' }) },
@@ -480,9 +465,7 @@ describe('POST /api/elements/sync (legacy overwrite)', () => {
     setElement('old-1', makeElement({ id: 'old-1' }));
     setElement('old-2', makeElement({ id: 'old-2' }));
 
-    const res = await request(app)
-      .post('/api/elements/sync')
-      .send({
+    const res = await postLegacySync({
         elements: [makeElement({ id: 'new-1' })],
       });
 
@@ -501,9 +484,7 @@ describe('POST /api/elements/sync (legacy overwrite)', () => {
   it('overwrite with empty array clears all elements', async () => {
     setElement('gone', makeElement({ id: 'gone' }));
 
-    await request(app)
-      .post('/api/elements/sync')
-      .send({ elements: [] });
+    await postLegacySync({ elements: [] });
 
     expect(getAllElements()).toHaveLength(0);
 
@@ -527,9 +508,7 @@ describe('GET /api/sync/version', () => {
     const r1 = await request(app).get('/api/sync/version');
     const v1 = r1.body.syncVersion;
 
-    await request(app)
-      .post('/api/elements/sync/v2')
-      .send({
+    await postSyncV2({
         lastSyncVersion: 0,
         changes: [{ id: 'bump', action: 'upsert', element: makeElement({ id: 'bump' }) }],
       });

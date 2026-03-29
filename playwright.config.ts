@@ -9,7 +9,7 @@ export default defineConfig({
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:3100',
+    baseURL: 'http://127.0.0.1:3100',
     trace: 'on-first-retry',
   },
   projects: [
@@ -25,8 +25,12 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     env: {
       CANVAS_PORT: '3100',
-      HOST: 'localhost',
+      HOST: '127.0.0.1',
       EXCALIDRAW_DB_PATH: '/tmp/excalidraw-e2e-test.db',
+      ALLOWED_ORIGINS: 'http://127.0.0.1:3100,http://localhost:3100,http://localhost:3000,http://127.0.0.1:3000',
+      EXCALIDRAW_RATE_LIMIT_GENERAL_MAX: '10000',
+      EXCALIDRAW_RATE_LIMIT_DESTRUCTIVE_MAX: '10000',
+      EXCALIDRAW_RATE_LIMIT_WRITE_BURST_MAX: '10000',
     },
   },
 });

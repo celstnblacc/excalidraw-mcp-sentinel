@@ -1,9 +1,19 @@
 import { test, expect } from '@playwright/test';
 
-const API = 'http://localhost:3100';
+const API = 'http://127.0.0.1:3100';
+
+async function resetCanvas(request: any): Promise<void> {
+  const listRes = await request.get(`${API}/api/elements`);
+  const listBody = await listRes.json();
+  await Promise.all(
+    (listBody.elements ?? []).map((element: { id: string }) =>
+      request.delete(`${API}/api/elements/${element.id}`)
+    )
+  );
+}
 
 test.beforeEach(async ({ request }) => {
-  await request.delete(`${API}/api/elements/clear`);
+  await resetCanvas(request);
 });
 
 // ─── Page Load ───────────────────────────────────────────────
@@ -103,7 +113,7 @@ test.describe('Element CRUD via API', () => {
       },
     });
 
-    const clearRes = await request.delete(`${API}/api/elements/clear`);
+    const clearRes = await request.delete(`${API}/api/elements/clear?confirm=true`);
     expect(clearRes.ok()).toBe(true);
     const clearBody = await clearRes.json();
     expect(clearBody.count).toBe(2);
@@ -150,7 +160,7 @@ test.describe('Real-time Canvas Sync', () => {
     });
     await page.waitForTimeout(300);
 
-    await request.delete(`${API}/api/elements/clear`);
+    await request.delete(`${API}/api/elements/clear?confirm=true`);
     await page.waitForTimeout(500);
 
     const listRes = await request.get(`${API}/api/elements`);

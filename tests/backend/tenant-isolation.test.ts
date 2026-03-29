@@ -194,7 +194,7 @@ describe('Element isolation per tenant', () => {
 
     // Clear tenant A
     await request(app)
-      .delete('/api/elements/clear')
+      .delete('/api/elements/clear?confirm=true')
       .set('X-Tenant-Id', 'clr-a');
 
     const resA = await request(app)

@@ -30,6 +30,7 @@ coverage
 .nyc_output
 *.test.ts
 *.spec.ts
+tests
 
 # CI/CD
 .github
@@ -48,6 +49,13 @@ docker-compose*.yml
 .env
 .env.local
 .env.*.local
+
+# Sensitive key material
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
 
 # Misc
 tmp

@@ -449,6 +449,31 @@ This fork extends [yctimlin/mcp_excalidraw](https://github.com/yctimlin/mcp_exca
 | `EXCALIDRAW_DB_PATH` | Path to the SQLite database file | `~/.excalidraw-mcp/excalidraw.db` |
 | `EXCALIDRAW_EXPORT_DIR` | Allowed directory for file exports | `process.cwd()` |
 | `EXPRESS_SERVER_URL` | Canvas server URL (only if running canvas separately) | `http://localhost:3000` |
+| `EXCALIDRAW_API_KEY` | Shared secret for API key auth on all `/api/*` routes. When unset, auth is disabled (dev mode). | _(unset — auth off)_ |
+| `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS + WebSocket origins | `http://localhost:3000,http://127.0.0.1:3000` |
+| `EXCALIDRAW_RATE_LIMIT_GENERAL_MAX` | Override the general API rate-limit ceiling (requests per 15-minute window) | `100` |
+| `EXCALIDRAW_RATE_LIMIT_DESTRUCTIVE_MAX` | Override the destructive-operation rate-limit ceiling (requests per 1-minute window) | `10` |
+| `EXCALIDRAW_RATE_LIMIT_WRITE_BURST_MAX` | Override the sync write-burst rate-limit ceiling (requests per 1-minute window) | `10` |
+
+### Security configuration
+
+**Enabling API key protection** (recommended for any network-accessible deployment):
+
+```bash
+EXCALIDRAW_API_KEY=your-secret-here node dist/server.js
+```
+
+All requests to `/api/*` must then include the header `X-API-Key: your-secret-here`. The `/health` endpoint is always exempt.
+
+When `EXCALIDRAW_API_KEY` is set, the browser canvas UI receives the key automatically: `GET /` injects `window.__EXCALIDRAW_API_KEY__` into the served HTML, so the browser's WebSocket `hello` message can include it without any manual configuration. The WebSocket handshake uses a challenge-response protocol: the server sends `{ type: "auth_required" }` immediately on connect, the client must respond with a `hello` message containing `{ apiKey: "<key>" }` within 5 seconds, or the connection is closed (code 4001).
+
+**Restricting CORS origins** (e.g. if your canvas UI is on a custom domain):
+
+```bash
+ALLOWED_ORIGINS=https://canvas.example.com,http://localhost:3000 node dist/server.js
+```
+
+This controls both REST CORS responses and WebSocket `Origin` verification. Requests with no `Origin` header (MCP stdio, curl, server-side tools) are always allowed.
 
 ## Multi-Tenancy (Workspaces)
 
@@ -504,8 +529,8 @@ cp -R skills/excalidraw-skill ~/.codex/skills/excalidraw-skill
 |---|---|
 | **Element CRUD** | `create_element`, `get_element`, `update_element`, `delete_element`, `query_elements`, `batch_create_elements`, `duplicate_elements` |
 | **Layout** | `align_elements`, `distribute_elements`, `group_elements`, `ungroup_elements`, `lock_elements`, `unlock_elements` |
-| **Scene Awareness** | `describe_scene`, `get_canvas_screenshot` |
-| **File I/O** | `export_scene`, `import_scene`, `export_to_image`, `export_to_excalidraw_url`, `create_from_mermaid` |
+| **Scene Awareness** | `describe_scene`, `get_canvas_screenshot` ⚠️ |
+| **File I/O** | `export_scene`, `import_scene`, `export_to_image` ⚠️, `export_to_excalidraw_url`, `create_from_mermaid` |
 | **State Management** | `clear_canvas`, `snapshot_scene`, `restore_snapshot` |
 | **Viewport** | `set_viewport` |
 | **Design Guide** | `read_diagram_guide` |
@@ -515,6 +540,8 @@ cp -R skills/excalidraw-skill ~/.codex/skills/excalidraw-skill
 | **Projects** | `list_projects`, `switch_project` |
 
 Full schemas are discoverable via `tools/list` or in `skills/excalidraw-skill/references/cheatsheet.md`.
+
+> ⚠️ **Requires open browser:** `get_canvas_screenshot` and `export_to_image` rely on the frontend rendering pipeline. The canvas UI must be open in a browser tab at `http://localhost:3000` for these tools to work. They return HTTP 503 if no browser is connected.
 
 ## Testing
 
@@ -661,20 +688,37 @@ The canvas server exposes a REST API alongside the WebSocket interface:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/health` | Health check |
+| GET | `/health` | Health check (auth-exempt) |
 | GET | `/api/elements` | List all elements |
 | POST | `/api/elements` | Create an element |
+| GET | `/api/elements/search` | Search elements (`?q=term` for FTS, `?type=rectangle` for filter) |
+| GET | `/api/elements/:id` | Get element by ID |
 | PUT | `/api/elements/:id` | Update an element |
 | DELETE | `/api/elements/:id` | Delete an element |
-| DELETE | `/api/elements/clear` | Clear all elements |
-| POST | `/api/elements/sync` | Sync all elements (bulk upsert) |
+| DELETE | `/api/elements/clear` | Clear all elements (requires `?confirm=true`) |
+| POST | `/api/elements/batch` | Batch create elements |
+| POST | `/api/elements/from-mermaid` | Convert Mermaid diagram and broadcast to canvas |
+| POST | `/api/elements/sync` | Bulk-replace all elements (canvas → server) |
+| POST | `/api/elements/sync/v2` | Delta sync (changes since `lastSyncVersion`) |
+| GET | `/api/sync/version` | Current sync version for a project |
+| GET | `/api/sync/status` | Sync status (element count, memory usage) |
+| GET | `/api/files` | List image files (in-memory) |
+| POST | `/api/files` | Add image files |
+| DELETE | `/api/files/:id` | Delete an image file |
+| POST | `/api/export/image` | Request image export (requires open browser tab) |
+| POST | `/api/export/image/result` | Deliver export result from frontend |
+| POST | `/api/viewport` | Set canvas viewport (requires open browser tab) |
+| POST | `/api/viewport/result` | Deliver viewport result from frontend |
+| POST | `/api/snapshots` | Save a named snapshot |
+| GET | `/api/snapshots` | List snapshots |
+| GET | `/api/snapshots/:name` | Get snapshot by name |
 | GET | `/api/tenants` | List all tenants |
 | GET | `/api/tenant/active` | Get the active tenant |
 | PUT | `/api/tenant/active` | Set the active tenant |
 | GET | `/api/settings/:key` | Read a setting |
 | PUT | `/api/settings/:key` | Write a setting |
 
-All endpoints accept an `X-Tenant-Id` header for per-request tenant scoping.
+All endpoints accept an `X-Tenant-Id` header for per-request tenant scoping. When `EXCALIDRAW_API_KEY` is set, all `/api/*` endpoints require `X-API-Key: <key>` (see [Security configuration](#security-configuration)).
 
 ## Credits
 
