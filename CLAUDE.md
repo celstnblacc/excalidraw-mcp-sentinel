@@ -106,6 +106,29 @@ frontend/      ── React + Excalidraw UI (Vite build → dist/frontend/)
 Two Dockerfiles: `Dockerfile` (MCP server only), `Dockerfile.canvas` (canvas with frontend). `docker-compose.yml` orchestrates both with a `full` profile.
 
 
+## Publish Readiness
+
+**Last hardened:** 2026-03-29 — gauntlet all-green, PR #1 merged.
+
+### Security posture (as of 1.6.3)
+- `src/security.ts`: helmet, CORS allowlist, timing-safe API key auth, prototype pollution guard, 3-tier rate limiting, WS challenge-response auth, Mermaid input size cap
+- 369/369 tests passing; 4 regression tests cover previously crash-able sync paths
+- Docker: non-root user, resource limits, hardened `.dockerignore`
+
+### Before running `npm publish`
+- [ ] Bump `version` in `package.json` to match `CHANGELOG.md` entry (currently `1.6.2` — next is `1.6.3`)
+- [ ] Run `npm test` — must be 369/369
+- [ ] Run `npm run build` — must be zero TS errors
+- [ ] Run `shipguard scan .` — must be 0 CRITICAL findings
+- [ ] Verify `CHANGELOG.md` has an entry for the version being published
+- [ ] `npm publish --dry-run` to confirm only `dist/`, `skills/`, `README.md`, `LICENSE` are included
+
+### Safe to push to GitHub?
+Yes — as of PR #1, the repo is clean for public visibility:
+- No secrets, hardcoded paths, or private identifiers in tracked files
+- Auth is opt-in (`EXCALIDRAW_API_KEY` unset = dev mode, by design)
+- Docker images run non-root with resource limits
+
 ## Code Search Optimization
 
 When exploring or understanding code in supported languages (JS, TS, Python, Go, Rust, Java, C, C++, Ruby):
