@@ -2923,7 +2923,7 @@ if (isMainModule()) {
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
       if (arg === '--help' || arg === '-h') {
-        process.stdout.write(`${pkg.name} v${pkg.version}\n\nUsage:\n  mcp-excalidraw-local          Start MCP server (stdio transport)\n  mcp-excalidraw-local setup     Interactive setup wizard\n  mcp-excalidraw-local update    Update agent skills and MCP config\n  mcp-excalidraw-local --help    Show this help\n  mcp-excalidraw-local --version Show version\n`);
+        process.stdout.write(`${pkg.name} v${pkg.version}\n\nUsage:\n  excalidraw-mcp-sentinel          Start MCP server (stdio transport)\n  excalidraw-mcp-sentinel setup     Interactive setup wizard\n  excalidraw-mcp-sentinel update    Update agent skills and MCP config\n  excalidraw-mcp-sentinel --help    Show this help\n  excalidraw-mcp-sentinel --version Show version\n`);
       } else {
         process.stdout.write(`${pkg.version}\n`);
       }

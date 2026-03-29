@@ -140,8 +140,8 @@ jobs:
 
       - name: Configure git
         run: |
-          git config user.name "sanjibdevnathlabs-release-bot[bot]"
-          git config user.email "${{ secrets.APP_ID }}+sanjibdevnathlabs-release-bot[bot]@users.noreply.github.com"
+          git config user.name "excalidraw-sentinel-release-bot[bot]"
+          git config user.email "${{ secrets.APP_ID }}+excalidraw-sentinel-release-bot[bot]@users.noreply.github.com"
 
       - name: Bump version in package.json
         run: |
@@ -170,7 +170,7 @@ jobs:
 
             ---
             ```
-            npm install @sanjibdevnath/mcp-excalidraw-local@${{ needs.check.outputs.new_version }}
+            npm install excalidraw-mcp-sentinel@${{ needs.check.outputs.new_version }}
             ```
           draft: false
           prerelease: false
@@ -208,7 +208,7 @@ jobs:
         id: check-npm
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          if npm view @sanjibdevnath/mcp-excalidraw-local@$VERSION version 2>/dev/null; then
+          if npm view excalidraw-mcp-sentinel@$VERSION version 2>/dev/null; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -253,8 +253,8 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            sanjibdevnath/mcp-excalidraw-local:latest
-            sanjibdevnath/mcp-excalidraw-local:v${{ needs.release.outputs.version }}
+            celstnblacc/excalidraw-mcp-sentinel:latest
+            celstnblacc/excalidraw-mcp-sentinel:v${{ needs.release.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
@@ -266,8 +266,8 @@ jobs:
           file: ./Dockerfile.canvas
           push: true
           tags: |
-            sanjibdevnath/mcp-excalidraw-local-canvas:latest
-            sanjibdevnath/mcp-excalidraw-local-canvas:v${{ needs.release.outputs.version }}
+            celstnblacc/excalidraw-mcp-sentinel-canvas:latest
+            celstnblacc/excalidraw-mcp-sentinel-canvas:v${{ needs.release.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64

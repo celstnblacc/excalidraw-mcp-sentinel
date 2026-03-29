@@ -17,8 +17,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE_NAME_MCP: sanjibdevnath/mcp-excalidraw-local
-  IMAGE_NAME_CANVAS: sanjibdevnath/mcp-excalidraw-local-canvas
+  IMAGE_NAME_MCP: celstnblacc/excalidraw-mcp-sentinel
+  IMAGE_NAME_CANVAS: celstnblacc/excalidraw-mcp-sentinel-canvas
 
 jobs:
   check-changes:

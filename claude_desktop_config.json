@@ -2,7 +2,7 @@
   "mcpServers": {
     "excalidraw-canvas": {
       "command": "node",
-      "args": ["/absolute/path/to/mcp-excalidraw-local/dist/index.js"],
+      "args": ["/absolute/path/to/excalidraw-mcp-sentinel/dist/index.js"],
       "env": {
         "CANVAS_PORT": "3000"
       }

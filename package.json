@@ -1,11 +1,11 @@
 {
-  "name": "@sanjibdevnath/mcp-excalidraw-local",
-  "version": "1.6.2",
-  "description": "Fully local MCP server for Excalidraw with SQLite persistence, multi-tenancy, auto-sync, real-time canvas, and 32 tools",
+  "name": "excalidraw-mcp-sentinel",
+  "version": "1.0.0",
+  "description": "Hardened, self-hosted Excalidraw MCP server with SQLite persistence, multi-tenancy, auto-sync, security middleware, and 369 tests",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
-    "mcp-excalidraw-local": "dist/index.js"
+    "excalidraw-mcp-sentinel": "dist/index.js"
   },
   "scripts": {
     "start": "npm run build:server && node dist/index.js",
@@ -84,9 +84,14 @@
     "local"
   ],
   "author": {
-    "name": "sanjibdevnathlabs"
+    "name": "celstnblacc",
+    "url": "https://github.com/celstnblacc"
   },
   "contributors": [
+    {
+      "name": "sanjibdevnathlabs",
+      "url": "https://github.com/sanjibdevnathlabs"
+    },
     {
       "name": "yctimlin",
       "email": "c22647809@gmail.com",
@@ -96,11 +101,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sanjibdevnathlabs/mcp-excalidraw-local.git"
+    "url": "https://github.com/celstnblacc/excalidraw-mcp-sentinel.git"
   },
-  "homepage": "https://github.com/sanjibdevnathlabs/mcp-excalidraw-local#readme",
+  "homepage": "https://github.com/celstnblacc/excalidraw-mcp-sentinel#readme",
   "bugs": {
-    "url": "https://github.com/sanjibdevnathlabs/mcp-excalidraw-local/issues"
+    "url": "https://github.com/celstnblacc/excalidraw-mcp-sentinel/issues"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

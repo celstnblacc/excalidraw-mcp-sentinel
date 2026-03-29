@@ -1,10 +1,10 @@
-# MCP Excalidraw Local
+# Excalidraw MCP Sentinel
 
-[![CI](https://github.com/sanjibdevnathlabs/mcp-excalidraw-local/actions/workflows/ci.yml/badge.svg)](https://github.com/sanjibdevnathlabs/mcp-excalidraw-local/actions/workflows/ci.yml)
-[![Release & Publish](https://github.com/sanjibdevnathlabs/mcp-excalidraw-local/actions/workflows/release.yml/badge.svg)](https://github.com/sanjibdevnathlabs/mcp-excalidraw-local/actions/workflows/release.yml)
+[![CI](https://github.com/celstnblacc/excalidraw-mcp-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/celstnblacc/excalidraw-mcp-sentinel/actions/workflows/ci.yml)
+[![Release & Publish](https://github.com/celstnblacc/excalidraw-mcp-sentinel/actions/workflows/release.yml/badge.svg)](https://github.com/celstnblacc/excalidraw-mcp-sentinel/actions/workflows/release.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A fully local, self-hosted Excalidraw MCP server with **SQLite persistence**, **multi-tenancy**, and **auto-sync** — designed to run entirely on your machine without depending on `excalidraw.com`.
+A **hardened**, fully local, self-hosted Excalidraw MCP server with **SQLite persistence**, **multi-tenancy**, **auto-sync**, and **production-grade security** — designed to run entirely on your machine without depending on `excalidraw.com`.
 
 Run a live Excalidraw canvas and control it from any AI agent. This repo provides:
 
@@ -13,10 +13,23 @@ Run a live Excalidraw canvas and control it from any AI agent. This repo provide
 - **Live Canvas**: Real-time Excalidraw UI synced via WebSocket
 - **SQLite Persistence**: Elements survive restarts, with versioning and search
 - **Multi-Tenancy**: Isolated canvases per workspace, auto-detected
+- **Security Hardened**: Helmet, rate limiting, API key auth, prototype pollution guard, WS challenge-response
+- **369 Tests**: Full test coverage across unit, API, WebSocket, and regression tests
 
-> **Fork notice:** This project is forked from [yctimlin/mcp_excalidraw](https://github.com/yctimlin/mcp_excalidraw) and extends it with persistence, multi-workspace support, and numerous UX improvements. Full credit to the original author for the excellent foundation. See [What Changed From Upstream](#what-changed-from-upstream) for details.
+## Why this fork?
 
-Keywords: Excalidraw MCP server, AI diagramming, local Excalidraw, self-hosted, SQLite persistence, multi-tenant, Mermaid to Excalidraw.
+Forked from [celstnblacc/excalidraw-mcp-sentinel](https://github.com/celstnblacc/excalidraw-mcp-sentinel) (itself a fork of [yctimlin/mcp_excalidraw](https://github.com/yctimlin/mcp_excalidraw)) with production hardening:
+
+- **369 tests** (upstream has none) — unit, API, WebSocket, and regression
+- **Security middleware** (`src/security.ts`): helmet, CORS allowlist, timing-safe API key auth, prototype pollution guard, input sanitization
+- **3-tier rate limiting**: general, destructive, and write-burst ceilings
+- **WebSocket challenge-response authentication**
+- **Docker hardening**: non-root user, resource limits, hardened `.dockerignore`
+- **Full gauntlet security audit pass**
+
+Full credit to [@sanjibdevnathlabs](https://github.com/sanjibdevnathlabs) and [@yctimlin](https://github.com/yctimlin) for the excellent foundation. See [What Changed From Upstream](#what-changed-from-upstream) for the full diff.
+
+Keywords: Excalidraw MCP server, AI diagramming, local Excalidraw, self-hosted, SQLite persistence, multi-tenant, Mermaid to Excalidraw, security hardened.
 
 ## Screenshots
 
@@ -87,14 +100,14 @@ Install "Desktop development with C++" from [Visual Studio Build Tools](https://
 The setup wizard checks your environment, optionally installs the agent skill, and configures MCP clients — all interactively. Every step is skippable.
 
 ```bash
-npx @sanjibdevnath/mcp-excalidraw-local setup
+npx excalidraw-mcp-sentinel setup
 ```
 
 <details>
 <summary>Example session</summary>
 
 ```
-$ npx @sanjibdevnath/mcp-excalidraw-local setup
+$ npx excalidraw-mcp-sentinel setup
 
   Excalidraw MCP — Setup
 
@@ -136,8 +149,8 @@ $ npx @sanjibdevnath/mcp-excalidraw-local setup
 ### Path B: From Source
 
 ```bash
-git clone https://github.com/sanjibdevnathlabs/mcp-excalidraw-local.git
-cd mcp-excalidraw-local
+git clone https://github.com/celstnblacc/excalidraw-mcp-sentinel.git
+cd excalidraw-mcp-sentinel
 
 npm install
 npm run build
@@ -156,7 +169,7 @@ Open `http://localhost:3000` in your browser.
 
 Canvas server:
 ```bash
-docker run -d -p 3000:3000 --name mcp-excalidraw-canvas sanjibdevnath/mcp-excalidraw-local-canvas:latest
+docker run -d -p 3000:3000 --name mcp-excalidraw-canvas celstnblacc/excalidraw-mcp-sentinel-canvas:latest
 ```
 
 MCP server (stdio) is typically launched by your MCP client:
@@ -168,7 +181,7 @@ MCP server (stdio) is typically launched by your MCP client:
       "args": [
         "run", "-i", "--rm",
         "-e", "CANVAS_PORT=3000",
-        "sanjibdevnath/mcp-excalidraw-local:latest"
+        "celstnblacc/excalidraw-mcp-sentinel:latest"
       ]
     }
   }
@@ -190,7 +203,7 @@ Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (per-project):
   "mcpServers": {
     "excalidraw-canvas": {
       "command": "npx",
-      "args": ["-y", "@sanjibdevnath/mcp-excalidraw-local"],
+      "args": ["-y", "excalidraw-mcp-sentinel"],
       "env": {
         "CANVAS_PORT": "3000"
       }
@@ -224,7 +237,7 @@ Add to `claude_desktop_config.json`:
   "mcpServers": {
     "excalidraw-canvas": {
       "command": "npx",
-      "args": ["-y", "@sanjibdevnath/mcp-excalidraw-local"],
+      "args": ["-y", "excalidraw-mcp-sentinel"],
       "env": {
         "CANVAS_PORT": "3000"
       }
@@ -238,7 +251,7 @@ Add to `claude_desktop_config.json`:
 ```bash
 claude mcp add excalidraw-canvas --scope user \
   -e CANVAS_PORT=3000 \
-  -- npx -y @sanjibdevnath/mcp-excalidraw-local
+  -- npx -y excalidraw-mcp-sentinel
 ```
 
 ### Codex CLI
@@ -250,7 +263,7 @@ Add to `~/.codex/mcp.json`:
   "mcpServers": {
     "excalidraw-canvas": {
       "command": "npx",
-      "args": ["-y", "@sanjibdevnath/mcp-excalidraw-local"],
+      "args": ["-y", "excalidraw-mcp-sentinel"],
       "env": {
         "CANVAS_PORT": "3000"
       }
@@ -288,14 +301,14 @@ Already installed a previous version? The interactive update wizard is the easie
 ### Interactive Update (recommended)
 
 ```bash
-npx @sanjibdevnath/mcp-excalidraw-local@latest update
+npx excalidraw-mcp-sentinel@latest update
 ```
 
 <details>
 <summary>Example session</summary>
 
 ```
-$ npx @sanjibdevnath/mcp-excalidraw-local@latest update
+$ npx excalidraw-mcp-sentinel@latest update
 
   Excalidraw MCP — Update  v1.2.0
 
@@ -333,7 +346,7 @@ If you prefer to update manually, follow the steps for your installation method,
 
 #### npx users
 
-If your MCP config uses `npx -y @sanjibdevnath/mcp-excalidraw-local`, npx caches the package locally and won't automatically fetch new versions.
+If your MCP config uses `npx -y excalidraw-mcp-sentinel`, npx caches the package locally and won't automatically fetch new versions.
 
 **Option A — Clear the cache (one-time):**
 ```bash
@@ -349,7 +362,7 @@ Update the `args` in your MCP config to include `@latest`:
   "mcpServers": {
     "excalidraw-canvas": {
       "command": "npx",
-      "args": ["-y", "@sanjibdevnath/mcp-excalidraw-local@latest"],
+      "args": ["-y", "excalidraw-mcp-sentinel@latest"],
       "env": { "CANVAS_PORT": "3000" }
     }
   }
@@ -370,8 +383,8 @@ npm run build
 #### Docker users
 
 ```bash
-docker pull sanjibdevnath/mcp-excalidraw-local:latest
-docker pull sanjibdevnath/mcp-excalidraw-local-canvas:latest
+docker pull celstnblacc/excalidraw-mcp-sentinel:latest
+docker pull celstnblacc/excalidraw-mcp-sentinel-canvas:latest
 ```
 
 Then recreate your containers (`docker compose up -d` or `docker run` again).
@@ -391,7 +404,7 @@ cp -R skills/excalidraw-skill ~/.claude/skills/excalidraw-skill
 curl -s http://localhost:3000/health
 
 # Or check the installed package version
-npx @sanjibdevnath/mcp-excalidraw-local --version
+npx excalidraw-mcp-sentinel --version
 ```
 
 ## How We Differ from the Official Excalidraw MCP
@@ -503,7 +516,7 @@ This repo includes a skill at `skills/excalidraw-skill/` that provides:
 The easiest way to install the skill:
 
 ```bash
-npx @sanjibdevnath/mcp-excalidraw-local setup
+npx excalidraw-mcp-sentinel setup
 ```
 
 The wizard detects your installed agents and lets you choose which ones get the skill.
@@ -589,7 +602,7 @@ This is the most common installation issue. `better-sqlite3` is a native Node.js
    ```
 3. Or run the setup wizard which handles this automatically:
    ```bash
-   npx @sanjibdevnath/mcp-excalidraw-local setup
+   npx excalidraw-mcp-sentinel setup
    ```
 
 ### EADDRINUSE (port already in use)
@@ -619,7 +632,7 @@ node dist/index.js   # restart
 
 ### NVM / path issues with npx
 
-**Symptom:** `npx @sanjibdevnath/mcp-excalidraw-local` hangs or uses the wrong Node version.
+**Symptom:** `npx excalidraw-mcp-sentinel` hangs or uses the wrong Node version.
 
 **Fix:**
 ```bash
@@ -639,7 +652,7 @@ Then use the full path in your MCP config:
   "mcpServers": {
     "excalidraw-canvas": {
       "command": "/Users/you/.nvm/versions/node/v22.12.0/bin/npx",
-      "args": ["-y", "@sanjibdevnath/mcp-excalidraw-local"],
+      "args": ["-y", "excalidraw-mcp-sentinel"],
       "env": { "CANVAS_PORT": "3000" }
     }
   }

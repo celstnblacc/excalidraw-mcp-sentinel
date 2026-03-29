@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A fully local, self-hosted Excalidraw MCP server. Single Node.js process that runs an MCP server (stdio, 32 tools), an embedded Express+WebSocket canvas server, and SQLite persistence with multi-tenancy. Forked from [yctimlin/mcp_excalidraw](https://github.com/yctimlin/mcp_excalidraw).
+A hardened, self-hosted Excalidraw MCP server (`excalidraw-mcp-sentinel`). Single Node.js process that runs an MCP server (stdio, 32 tools), an embedded Express+WebSocket canvas server, and SQLite persistence with multi-tenancy. Forked from [sanjibdevnathlabs/mcp-excalidraw-local](https://github.com/sanjibdevnathlabs/mcp-excalidraw-local) (itself from [yctimlin/mcp_excalidraw](https://github.com/yctimlin/mcp_excalidraw)).
 
 ## Build & Development Commands
 
@@ -38,7 +38,7 @@ node dist/server.js
 curl http://localhost:3000/health
 ```
 
-There are no unit tests. Validation is done via type checking (`pnpm run type-check`) and build verification. The CI runs `type-check` then `build` across Node 18/20/22.
+369 tests across unit, API, WebSocket, and regression suites. Run `npm test` or `pnpm test`. CI runs `type-check` then `build` then `test` across Node 18/20/22.
 
 ## Architecture
 
@@ -116,7 +116,7 @@ Two Dockerfiles: `Dockerfile` (MCP server only), `Dockerfile.canvas` (canvas wit
 - Docker: non-root user, resource limits, hardened `.dockerignore`
 
 ### Before running `npm publish`
-- [ ] Bump `version` in `package.json` to match `CHANGELOG.md` entry (currently `1.6.2` — next is `1.6.3`)
+- [ ] Bump `version` in `package.json` to match `CHANGELOG.md` entry (currently `1.0.0`)
 - [ ] Run `npm test` — must be 369/369
 - [ ] Run `npm run build` — must be zero TS errors
 - [ ] Run `shipguard scan .` — must be 0 CRITICAL findings

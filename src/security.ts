@@ -1,5 +1,5 @@
 /**
- * Security middleware for mcp-excalidraw-local.
+ * Security middleware for excalidraw-mcp-sentinel.
  *
  * All env vars are read at request/connection time (not at module init)
  * so that tests can mutate process.env between cases.
