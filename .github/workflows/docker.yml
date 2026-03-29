@@ -66,7 +66,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@902fa8ec7d6ecbea8d2b4be1c9f4f0fc4a38bf1a # v5.7.0
+        uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE_NAME_MCP }}
           tags: |
@@ -104,7 +104,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@902fa8ec7d6ecbea8d2b4be1c9f4f0fc4a38bf1a # v5.7.0
+        uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE_NAME_CANVAS }}
           tags: |
