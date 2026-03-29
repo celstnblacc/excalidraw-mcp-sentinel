@@ -51,6 +51,9 @@ USER nodejs
 
 ENV NODE_ENV=production
 ENV PORT=3000
+# HOST=0.0.0.0 is correct inside Docker: the container binds all interfaces,
+# but external access is gated by the published port mapping in docker-compose.yml.
+# For local dev without Docker, the server defaults to localhost (127.0.0.1).
 ENV HOST=0.0.0.0
 ENV EXCALIDRAW_DB_PATH=/app/data/excalidraw.db
 

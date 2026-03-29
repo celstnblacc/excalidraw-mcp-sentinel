@@ -26,7 +26,7 @@ jobs:
       should_release: ${{ steps.bump.outputs.should_release }}
       prev_tag: ${{ steps.bump.outputs.prev_tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
@@ -128,12 +128,12 @@ jobs:
     steps:
       - name: Generate release bot token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@c1a285145b9d317df6ced56c550f5b5e3e8cd3f9 # v1.11.6
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
@@ -156,7 +156,7 @@ jobs:
           git push origin "v${{ needs.check.outputs.new_version }}"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@da05d552573ad5aba36ea0be2ddfef1a7e5c4d12 # v2.2.2
         with:
           token: ${{ steps.app-token.outputs.token }}
           tag_name: v${{ needs.check.outputs.new_version }}
@@ -180,19 +180,19 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: main
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20.x'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Cache node_modules
         id: cache-nm
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: node_modules
           key: node-modules-${{ runner.os }}-node20.x-${{ hashFiles('package-lock.json') }}
@@ -233,21 +233,21 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: v${{ needs.release.outputs.version }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push MCP Server image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@14487ce63c7a62a4a324b0bfb37086795e31c6c1 # v5.5.0
         with:
           context: .
           file: ./Dockerfile
@@ -260,7 +260,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
 
       - name: Build and push Canvas Server image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@14487ce63c7a62a4a324b0bfb37086795e31c6c1 # v5.5.0
         with:
           context: .
           file: ./Dockerfile.canvas

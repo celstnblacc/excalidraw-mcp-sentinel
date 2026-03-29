@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Project-level pre-commit hook for mcp-excalidraw-local.
+# ShipGuard SAST and secret detection are handled by the global hook.
+# This hook runs the project test suite.
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+echo "→ Running tests (vitest)..."
+npm test --silent

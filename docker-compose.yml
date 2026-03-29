@@ -22,8 +22,14 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      # HOST=0.0.0.0 is intentional in Docker — the container's port is
+      # exposed only via the published port mapping above. For local dev
+      # without Docker, the default is localhost (set in src/server.ts).
       - HOST=0.0.0.0
       - DEBUG=false
+      # Optional: set to enable API key auth on all /api/* routes.
+      # Must match EXCALIDRAW_API_KEY in the mcp service below so inter-service calls succeed.
+      - EXCALIDRAW_API_KEY=${EXCALIDRAW_API_KEY:-}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
@@ -31,6 +37,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
     networks:
       - mcp-network
 
@@ -49,9 +60,16 @@ services:
       - EXPRESS_SERVER_URL=http://canvas:3000
       - ENABLE_CANVAS_SYNC=true
       - DEBUG=false
+      # Must match canvas EXCALIDRAW_API_KEY so inter-service sync calls are authenticated.
+      - EXCALIDRAW_API_KEY=${EXCALIDRAW_API_KEY:-}
     depends_on:
       canvas:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
     networks:
       - mcp-network
     profiles:

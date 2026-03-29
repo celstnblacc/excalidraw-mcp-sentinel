@@ -7,6 +7,12 @@ public/dist/
 
 # Environment files
 .env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.json
 
 # Logs
 *.log

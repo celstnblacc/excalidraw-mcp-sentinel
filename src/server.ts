@@ -1,6 +1,6 @@
 import express, { type Application, Request, Response, NextFunction } from 'express';
-import cors from 'cors';
 import { WebSocketServer } from 'ws';
+import { helmetMiddleware, corsMiddleware, apiKeyAuth, verifyWsClient, generalRateLimit, destructiveRateLimit, writeBurstLimit, requireConfirm, sanitizeBody, validateMermaidInput, isAuthEnabled, validateApiKey, sanitizeSearchQuery, InvalidSearchQueryError } from './security.js';
 import { createServer } from 'http';
 import fs from 'fs';
 import path from 'path';
@@ -19,6 +19,7 @@ import {
   BatchCreatedMessage,
   SyncStatusMessage,
   InitialElementsMessage,
+  HelloMessage,
   Snapshot,
   normalizeFontFamily,
   ExcalidrawFile,
@@ -27,7 +28,7 @@ import {
   BroadcastResult
 } from './types.js';
 import * as store from './db.js';
-import { initDb, listTenants as dbListTenants, getActiveTenant as dbGetActiveTenant, setActiveTenant as dbSetActiveTenant, getDefaultProjectForTenant, getCurrentSyncVersion, getChangesSince } from './db.js';
+import { initDb, listTenants as dbListTenants, getActiveTenant as dbGetActiveTenant, getTenantById, setActiveTenant as dbSetActiveTenant, getDefaultProjectForTenant, getProjectForTenant, getCurrentSyncVersion, getChangesSince } from './db.js';
 import { z } from 'zod';
 import WebSocket from 'ws';
 
@@ -39,17 +40,25 @@ const __dirname = path.dirname(__filename);
 
 const app: Application = express();
 const httpServer = createServer(app);
-const wss = new WebSocketServer({ server: httpServer });
+const wss = new WebSocketServer({ server: httpServer, verifyClient: verifyWsClient });
 
 // Middleware
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(helmetMiddleware);
+app.use(corsMiddleware);
+app.use('/api', generalRateLimit);
+app.use('/api', apiKeyAuth);
+// Body parsing — path-specific limits applied in order (most-specific first).
+// batch/sync endpoints get 5 MB; everything else gets 100 KB.
+app.use('/api/elements/batch', express.json({ limit: '5mb' }));
+app.use('/api/elements/sync', express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '100kb' }));
+app.use('/api', sanitizeBody);
 
 // Serve static files from the build directory
 const staticDir = path.join(__dirname, '../dist');
-app.use(express.static(staticDir));
+app.use(express.static(staticDir, { index: false }));
 // Also serve frontend assets
-app.use(express.static(path.join(__dirname, '../dist/frontend')));
+app.use(express.static(path.join(__dirname, '../dist/frontend'), { index: false }));
 
 // Resolve tenant from X-Tenant-Id header to a projectId override.
 // Returns undefined when header is absent (browser requests), falling back to global state.
@@ -71,6 +80,113 @@ function resolveScope(req: Request): { tenantId: string; projectId: string } {
   const tenant = dbGetActiveTenant();
   const projectId = getDefaultProjectForTenant(tenant.id) ?? `${tenant.id}-default`;
   return { tenantId: tenant.id, projectId };
+}
+
+const WS_AUTH_CLOSE_CODE = 4001;
+const WS_AUTH_TIMEOUT_MS = 5000;
+const frontendHtmlPath = path.join(__dirname, '../dist/frontend/index.html');
+
+function identifyConnection(ws: WebSocket, tenantId: string, projectId: string): void {
+  if (wsToConnection.has(ws)) {
+    moveConnection(ws, tenantId, projectId);
+    return;
+  }
+
+  registerConnection({
+    ws,
+    tenantId,
+    projectId,
+    connectedAt: Date.now(),
+    identified: true,
+  });
+}
+
+function getAllFilesObject(): Record<string, ExcalidrawFile> {
+  const result: Record<string, ExcalidrawFile> = {};
+  for (const [id, file] of files) {
+    result[id] = file;
+  }
+  return result;
+}
+
+function sendFilesAdded(ws: WebSocket): void {
+  if (files.size === 0) return;
+  ws.send(JSON.stringify({ type: 'files_added', files: getAllFilesObject() }));
+}
+
+function sendSyncStatus(ws: WebSocket, projectId: string): void {
+  const syncMessage: SyncStatusMessage = {
+    type: 'sync_status',
+    elementCount: store.getElementCount(projectId),
+    timestamp: new Date().toISOString()
+  };
+  ws.send(JSON.stringify(syncMessage));
+}
+
+function sendAuthlessInitialMessages(
+  ws: WebSocket,
+  tenant: { id: string; name: string; workspace_path: string },
+  projectId: string
+): void {
+  ws.send(JSON.stringify({
+    type: 'tenant_switched',
+    tenant: { id: tenant.id, name: tenant.name, workspace_path: tenant.workspace_path }
+  }));
+
+  const initialMessage: InitialElementsMessage = {
+    type: 'initial_elements',
+    elements: store.getAllElements(projectId)
+  };
+  ws.send(JSON.stringify(initialMessage));
+
+  sendFilesAdded(ws);
+  sendSyncStatus(ws, projectId);
+}
+
+function sendHelloAck(
+  ws: WebSocket,
+  tenant: { id: string; name: string; workspace_path: string },
+  projectId: string
+): void {
+  ws.send(JSON.stringify({
+    type: 'hello_ack',
+    tenant: { id: tenant.id, name: tenant.name, workspace_path: tenant.workspace_path },
+    tenantId: tenant.id,
+    projectId,
+    elements: store.getAllElements(projectId)
+  }));
+}
+
+function resolveHelloTenantAndProject(msg: HelloMessage):
+  | { tenant: { id: string; name: string; workspace_path: string }; projectId: string }
+  | { error: string } {
+  let tenant = dbGetActiveTenant();
+
+  if (typeof msg.tenantId === 'string' && msg.tenantId.trim()) {
+    const requestedTenant = getTenantById(msg.tenantId.trim());
+    if (!requestedTenant) {
+      return { error: 'Unknown tenant' };
+    }
+    tenant = requestedTenant;
+  }
+
+  let projectId = getDefaultProjectForTenant(tenant.id);
+  if (typeof msg.projectId === 'string' && msg.projectId.trim()) {
+    const requestedProject = getProjectForTenant(msg.projectId.trim(), tenant.id);
+    if (requestedProject) {
+      projectId = requestedProject.id;
+    }
+  }
+
+  return { tenant, projectId };
+}
+
+function injectApiKeyIntoHtml(html: string): string {
+  const apiKey = process.env.EXCALIDRAW_API_KEY;
+  if (!apiKey) return html;
+  const serialized = JSON.stringify(apiKey).replace(/</g, '\\u003c');
+  const script = `<script>window.__EXCALIDRAW_API_KEY__=${serialized};</script>`;
+  return html.includes('</head>') ? html.replace('</head>', `${script}</head>`) : `${script}${html}`;
 }
 
 // ── Connection Registry (Task 3) ──────────────────────────────────────────
@@ -248,72 +364,73 @@ function broadcast(message: WebSocketMessage): void {
 
 // ── WebSocket Connection Handling (Task 4: Hello Handshake) ───────────────
 wss.on('connection', (ws: WebSocket) => {
-  // Register with fallback scope until hello handshake identifies the client.
-  const tenant = (() => { try { return dbGetActiveTenant(); } catch { return { id: 'default', name: 'default', workspace_path: '' }; } })();
-  const fallbackProjectId = getDefaultProjectForTenant(tenant.id) ?? 'default';
-  const conn: ClientConnection = {
-    ws,
-    tenantId: tenant.id,
-    projectId: fallbackProjectId,
-    connectedAt: Date.now(),
-    identified: false
-  };
-  registerConnection(conn);
-  logger.info('New WebSocket connection established (awaiting hello)');
+  const authEnabled = isAuthEnabled();
+  let awaitingAuth = authEnabled;
+  let authTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Send tenant info so the FE knows where to send hello
-  ws.send(JSON.stringify({
-    type: 'tenant_switched',
-    tenant: { id: tenant.id, name: tenant.name, workspace_path: tenant.workspace_path }
-  }));
-
-  // For backward compatibility: also send initial_elements immediately.
-  // New FE versions will ignore this and use hello_ack instead.
-  const initialMessage: InitialElementsMessage = {
-    type: 'initial_elements',
-    elements: store.getAllElements(fallbackProjectId)
-  };
-  ws.send(JSON.stringify(initialMessage));
-
-  // Send any stored files (image data)
-  if (files.size > 0) {
-    const allFiles: Record<string, ExcalidrawFile> = {};
-    for (const [id, file] of files) {
-      allFiles[id] = file;
+  const tenant = (() => {
+    try {
+      return dbGetActiveTenant();
+    } catch {
+      return { id: 'default', name: 'default', workspace_path: '' };
     }
-    ws.send(JSON.stringify({ type: 'files_added', files: allFiles }));
-  }
+  })();
+  const fallbackProjectId = getDefaultProjectForTenant(tenant.id) ?? 'default';
 
-  // Send sync status to new client
-  const syncMessage: SyncStatusMessage = {
-    type: 'sync_status',
-    elementCount: store.getElementCount(fallbackProjectId),
-    timestamp: new Date().toISOString()
-  };
-  ws.send(JSON.stringify(syncMessage));
+  logger.info(`New WebSocket connection established${authEnabled ? ' (awaiting auth)' : ' (legacy mode)'}`);
+
+  if (authEnabled) {
+    ws.send(JSON.stringify({ type: 'auth_required' }));
+    authTimer = setTimeout(() => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({ type: 'auth_failed', reason: 'timeout' }));
+      ws.close(WS_AUTH_CLOSE_CODE, 'Authentication required');
+    }, WS_AUTH_TIMEOUT_MS);
+  } else {
+    registerConnection({
+      ws,
+      tenantId: tenant.id,
+      projectId: fallbackProjectId,
+      connectedAt: Date.now(),
+      identified: false
+    });
+    sendAuthlessInitialMessages(ws, tenant, fallbackProjectId);
+  }
 
   // Handle incoming messages from this client
   ws.on('message', (raw) => {
     try {
       const msg = JSON.parse(raw.toString());
       if (msg.type === 'hello') {
-        const helloTenantId = msg.tenantId as string;
-        const helloProjectId = (msg.projectId as string) || getDefaultProjectForTenant(msg.tenantId) || `${msg.tenantId}-default`;
-        if (helloTenantId) {
-          // Move connection to the correct scope
-          moveConnection(ws, helloTenantId, helloProjectId);
-          logger.info(`Client identified: tenant=${helloTenantId} project=${helloProjectId}`);
-
-          // Respond with scoped elements
-          const elements = store.getAllElements(helloProjectId);
-          ws.send(JSON.stringify({
-            type: 'hello_ack',
-            tenantId: helloTenantId,
-            projectId: helloProjectId,
-            elements
-          }));
+        if (awaitingAuth) {
+          if (!validateApiKey(msg.apiKey)) {
+            ws.send(JSON.stringify({ type: 'auth_failed', reason: 'invalid_key' }));
+            ws.close(WS_AUTH_CLOSE_CODE, 'Invalid API key');
+            return;
+          }
+          awaitingAuth = false;
+          if (authTimer) {
+            clearTimeout(authTimer);
+            authTimer = null;
+          }
         }
+
+        const resolved = resolveHelloTenantAndProject(msg);
+        if ('error' in resolved) {
+          ws.send(JSON.stringify({ type: 'error', message: resolved.error }));
+          return;
+        }
+        identifyConnection(ws, resolved.tenant.id, resolved.projectId);
+        logger.info(`Client identified: tenant=${resolved.tenant.id} project=${resolved.projectId}`);
+
+        sendHelloAck(ws, resolved.tenant, resolved.projectId);
+        if (authEnabled) {
+          sendFilesAdded(ws);
+          sendSyncStatus(ws, resolved.projectId);
+        }
+        return;
       }
+      if (awaitingAuth) return;
       if (msg.type === 'ack' && msg.msgId) {
         resolveAck(msg.msgId, {
           status: msg.status ?? 'applied',
@@ -327,22 +444,23 @@ wss.on('connection', (ws: WebSocket) => {
   });
 
   ws.on('close', () => {
+    if (authTimer) clearTimeout(authTimer);
     unregisterConnection(ws);
     logger.info('WebSocket connection closed');
   });
 
   ws.on('error', (error) => {
+    if (authTimer) clearTimeout(authTimer);
     logger.error('WebSocket error:', error);
     unregisterConnection(ws);
   });
 });
 
-// Schema validation
-const CreateElementSchema = z.object({
-  id: z.string().optional(),
-  type: z.enum(Object.values(EXCALIDRAW_ELEMENT_TYPES) as [ExcalidrawElementType, ...ExcalidrawElementType[]]),
-  x: z.number(),
-  y: z.number(),
+// Module-level constants
+const VALID_ELEMENT_TYPES = new Set(Object.values(EXCALIDRAW_ELEMENT_TYPES));
+
+// Schema validation — shared fields extracted to avoid duplication
+const ElementSharedFieldsSchema = z.object({
   width: z.number().optional(),
   height: z.number().optional(),
   backgroundColor: z.string().optional(),
@@ -353,9 +471,7 @@ const CreateElementSchema = z.object({
   opacity: z.number().optional(),
   text: z.string().optional(),
   originalText: z.string().optional(),
-  label: z.object({
-    text: z.string()
-  }).optional(),
+  label: z.object({ text: z.string() }).optional(),
   fontSize: z.number().optional(),
   fontFamily: z.union([z.string(), z.number()]).optional(),
   groupIds: z.array(z.string()).optional(),
@@ -363,7 +479,6 @@ const CreateElementSchema = z.object({
   roundness: z.object({ type: z.number(), value: z.number().optional() }).nullable().optional(),
   fillStyle: z.string().optional(),
   // Arrow-specific properties
-  points: z.any().optional(),
   start: z.object({ id: z.string() }).optional(),
   end: z.object({ id: z.string() }).optional(),
   startArrowhead: z.string().nullable().optional(),
@@ -378,45 +493,23 @@ const CreateElementSchema = z.object({
   scale: z.tuple([z.number(), z.number()]).optional(),
 });
 
-const UpdateElementSchema = z.object({
+const CreateElementSchema = ElementSharedFieldsSchema.extend({
+  id: z.string().optional(),
+  type: z.enum(Object.values(EXCALIDRAW_ELEMENT_TYPES) as [ExcalidrawElementType, ...ExcalidrawElementType[]]),
+  x: z.number(),
+  y: z.number(),
+  points: z.any().optional(),
+});
+
+const UpdateElementSchema = ElementSharedFieldsSchema.extend({
   id: z.string(),
   type: z.enum(Object.values(EXCALIDRAW_ELEMENT_TYPES) as [ExcalidrawElementType, ...ExcalidrawElementType[]]).optional(),
   x: z.number().optional(),
   y: z.number().optional(),
-  width: z.number().optional(),
-  height: z.number().optional(),
-  backgroundColor: z.string().optional(),
-  strokeColor: z.string().optional(),
-  strokeWidth: z.number().optional(),
-  strokeStyle: z.string().optional(),
-  roughness: z.number().optional(),
-  opacity: z.number().optional(),
-  text: z.string().optional(),
-  originalText: z.string().optional(),
-  label: z.object({
-    text: z.string()
-  }).optional(),
-  fontSize: z.number().optional(),
-  fontFamily: z.union([z.string(), z.number()]).optional(),
-  groupIds: z.array(z.string()).optional(),
-  locked: z.boolean().optional(),
-  roundness: z.object({ type: z.number(), value: z.number().optional() }).nullable().optional(),
-  fillStyle: z.string().optional(),
   points: z.array(z.union([
     z.tuple([z.number(), z.number()]),
     z.object({ x: z.number(), y: z.number() })
   ])).optional(),
-  start: z.object({ id: z.string() }).optional(),
-  end: z.object({ id: z.string() }).optional(),
-  startArrowhead: z.string().nullable().optional(),
-  endArrowhead: z.string().nullable().optional(),
-  startBinding: z.any().nullable().optional(),
-  endBinding: z.any().nullable().optional(),
-  boundElements: z.any().nullable().optional(),
-  elbowed: z.boolean().optional(),
-  fileId: z.string().optional(),
-  status: z.string().optional(),
-  scale: z.tuple([z.number(), z.number()]).optional(),
 });
 
 // API Routes
@@ -465,7 +558,7 @@ app.post('/api/elements', async (req: Request, res: Response) => {
       type: 'element_created',
       element: element
     };
-    (message as any).sync_version = sv;
+    message['sync_version'] = sv;
     const ackResult = await serializedBroadcastWithAck(scope.tenantId, scope.projectId, message);
 
     res.json({
@@ -526,7 +619,7 @@ app.put('/api/elements/:id', async (req: Request, res: Response) => {
       type: 'element_updated',
       element: updatedElement
     };
-    (message as any).sync_version = sv;
+    message['sync_version'] = sv;
     const ackResult = await serializedBroadcastWithAck(scope.tenantId, scope.projectId, message);
 
     res.json({
@@ -550,7 +643,7 @@ app.put('/api/elements/:id', async (req: Request, res: Response) => {
 });
 
 // Clear all elements (must be before /:id route)
-app.delete('/api/elements/clear', (req: Request, res: Response) => {
+app.delete('/api/elements/clear', destructiveRateLimit, requireConfirm, (req: Request, res: Response) => {
   try {
     const projId = resolveTenantProject(req);
     const count = store.clearElements(projId);
@@ -626,8 +719,11 @@ app.get('/api/elements/search', (req: Request, res: Response) => {
     const { type, q, ...filters } = req.query;
 
     if (q && typeof q === 'string') {
-      const results = store.searchElements(q, projId);
-      return res.json({ success: true, elements: results, count: results.length });
+      const sanitizedQuery = sanitizeSearchQuery(q);
+      if (sanitizedQuery) {
+        const results = store.searchElements(sanitizedQuery, projId);
+        return res.json({ success: true, elements: results, count: results.length });
+      }
     }
 
     const results = store.queryElements(
@@ -643,9 +739,15 @@ app.get('/api/elements/search', (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error('Error querying elements:', error);
+    if (error instanceof InvalidSearchQueryError) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid search query'
+      });
+    }
     res.status(500).json({
       success: false,
-      error: (error as Error).message
+      error: 'Search failed'
     });
   }
 });
@@ -881,7 +983,7 @@ app.post('/api/elements/batch', async (req: Request, res: Response) => {
 });
 
 // Convert Mermaid diagram to Excalidraw elements
-app.post('/api/elements/from-mermaid', (req: Request, res: Response) => {
+app.post('/api/elements/from-mermaid', validateMermaidInput, (req: Request, res: Response) => {
   try {
     const { mermaidDiagram, config } = req.body;
     
@@ -923,22 +1025,22 @@ app.post('/api/elements/from-mermaid', (req: Request, res: Response) => {
 });
 
 // Sync elements from frontend (overwrite sync)
-app.post('/api/elements/sync', (req: Request, res: Response) => {
+app.post('/api/elements/sync', writeBurstLimit, (req: Request, res: Response) => {
   try {
     const projId = resolveTenantProject(req);
     const { elements: frontendElements, timestamp } = req.body;
-    
-    logger.info(`Sync request received: ${frontendElements.length} elements`, {
-      timestamp,
-      elementCount: frontendElements.length
-    });
-    
+
     if (!Array.isArray(frontendElements)) {
       return res.status(400).json({
         success: false,
         error: 'Expected elements to be an array'
       });
     }
+
+    logger.info(`Sync request received: ${frontendElements.length} elements`, {
+      timestamp,
+      elementCount: frontendElements.length
+    });
     
     const beforeCount = store.getElementCount(projId);
 
@@ -996,7 +1098,7 @@ app.post('/api/elements/sync', (req: Request, res: Response) => {
 
 // ── Delta Sync v2 (Task 10) ──
 
-app.post('/api/elements/sync/v2', (req: Request, res: Response) => {
+app.post('/api/elements/sync/v2', writeBurstLimit, (req: Request, res: Response) => {
   try {
     const projId = resolveTenantProject(req);
     const { lastSyncVersion = 0, changes = [] } = req.body;
@@ -1007,6 +1109,20 @@ app.post('/api/elements/sync/v2', (req: Request, res: Response) => {
 
     const scope = resolveScope(req);
     const feChangeIds = new Set<string>();
+
+    // Validate all upsert elements before applying any changes
+    for (const change of changes) {
+      const { id, action, element } = change;
+      if (!id || !action) continue;
+      if (action === 'upsert' && element && element.type !== undefined) {
+        if (!VALID_ELEMENT_TYPES.has(element.type)) {
+          return res.status(400).json({
+            success: false,
+            error: `Invalid element type: ${element.type}`
+          });
+        }
+      }
+    }
 
     // Apply FE changes to DB
     let appliedCount = 0;
@@ -1069,11 +1185,7 @@ app.get('/api/sync/version', (req: Request, res: Response) => {
 // Get all files
 app.get('/api/files', (_req: Request, res: Response) => {
   try {
-    const allFiles: Record<string, ExcalidrawFile> = {};
-    for (const [id, file] of files) {
-      allFiles[id] = file;
-    }
-    res.json({ success: true, files: allFiles });
+    res.json({ success: true, files: getAllFilesObject() });
   } catch (error) {
     logger.error('Error fetching files:', error);
     res.status(500).json({ success: false, error: (error as Error).message });
@@ -1415,12 +1527,13 @@ app.get('/api/snapshots/:name', (req: Request, res: Response) => {
 
 // Serve the frontend
 app.get('/', (req: Request, res: Response) => {
-  const htmlFile = path.join(__dirname, '../dist/frontend/index.html');
-  res.sendFile(htmlFile, (err) => {
+  fs.readFile(frontendHtmlPath, 'utf8', (err, html) => {
     if (err) {
       logger.error('Error serving frontend:', err);
       res.status(404).send('Frontend not found. Please run "npm run build" first.');
+      return;
     }
+    res.type('html').send(injectApiKeyIntoHtml(html));
   });
 });
 
@@ -1524,11 +1637,15 @@ app.get('/api/sync/status', (req: Request, res: Response) => {
 });
 
 // Error handling middleware
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  // Propagate HTTP status from framework errors (e.g. 413 from express.json, 429 from rate-limit).
+  const status: number = typeof err.status === 'number' ? err.status
+    : typeof err.statusCode === 'number' ? err.statusCode
+    : 500;
   logger.error('Unhandled error:', err);
-  res.status(500).json({
+  res.status(status).json({
     success: false,
-    error: 'Internal server error'
+    error: status === 500 ? 'Internal server error' : (err.message ?? 'Error')
   });
 });
 

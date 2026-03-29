@@ -1,9 +1,19 @@
 import { test, expect, type Page } from '@playwright/test';
 
-const API = 'http://localhost:3100';
+const API = 'http://127.0.0.1:3100';
+
+async function resetCanvas(request: any): Promise<void> {
+  const listRes = await request.get(`${API}/api/elements`);
+  const listBody = await listRes.json();
+  await Promise.all(
+    (listBody.elements ?? []).map((element: { id: string }) =>
+      request.delete(`${API}/api/elements/${element.id}`)
+    )
+  );
+}
 
 test.beforeEach(async ({ request }) => {
-  await request.delete(`${API}/api/elements/clear`);
+  await resetCanvas(request);
 });
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -357,7 +367,7 @@ test.describe('Clear canvas persistence', () => {
     await page.waitForTimeout(500);
 
     // Clear
-    await request.delete(`${API}/api/elements/clear`);
+    await request.delete(`${API}/api/elements/clear?confirm=true`);
     await page.waitForTimeout(500);
 
     // Verify gone
@@ -394,7 +404,7 @@ test.describe('Snapshots E2E', () => {
     expect((await snapRes.json()).success).toBe(true);
 
     // Clear
-    await request.delete(`${API}/api/elements/clear`);
+    await request.delete(`${API}/api/elements/clear?confirm=true`);
     expect(await getServerElementCount(request)).toBe(0);
 
     // List snapshots

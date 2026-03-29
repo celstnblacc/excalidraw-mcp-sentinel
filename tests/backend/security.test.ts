@@ -107,6 +107,36 @@ describe('Input validation - sync endpoints', () => {
     expect(res.status).toBe(400);
   });
 
+  it('POST /api/elements/sync rejects null elements → 400 not 500', async () => {
+    const res = await request(app)
+      .post('/api/elements/sync')
+      .send({ elements: null });
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('POST /api/elements/sync rejects missing elements field → 400 not 500', async () => {
+    const res = await request(app)
+      .post('/api/elements/sync')
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('POST /api/elements/sync/v2 rejects invalid element type in upsert → 400', async () => {
+    const res = await request(app)
+      .post('/api/elements/sync/v2')
+      .send({
+        lastSyncVersion: 0,
+        changes: [{ id: 'test-id', action: 'upsert', element: { type: 'malicious<script>', x: 0, y: 0 } }]
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
   it('POST /api/elements/sync/v2 rejects non-number lastSyncVersion', async () => {
     const res = await request(app)
       .post('/api/elements/sync/v2')

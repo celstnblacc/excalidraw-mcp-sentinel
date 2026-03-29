@@ -46,7 +46,7 @@ describe('Clear canvas confirmation flow', () => {
     setElement('cl-2', makeElement({ id: 'cl-2' }));
     expect(getAllElements()).toHaveLength(2);
 
-    const res = await request(app).delete('/api/elements/clear');
+    const res = await request(app).delete('/api/elements/clear?confirm=true');
     expect(res.body.success).toBe(true);
     expect(res.body.count).toBeDefined();
 
@@ -54,13 +54,13 @@ describe('Clear canvas confirmation flow', () => {
   });
 
   it('clear on empty canvas returns zero count', async () => {
-    const res = await request(app).delete('/api/elements/clear');
+    const res = await request(app).delete('/api/elements/clear?confirm=true');
     expect(res.body.success).toBe(true);
   });
 
   it('cleared elements stay gone on subsequent GET requests', async () => {
     setElement('stay-gone', makeElement({ id: 'stay-gone' }));
-    await request(app).delete('/api/elements/clear');
+    await request(app).delete('/api/elements/clear?confirm=true');
 
     for (let i = 0; i < 3; i++) {
       const res = await request(app).get('/api/elements');
@@ -160,7 +160,7 @@ describe('Snapshot create and restore flow', () => {
     expect(snapRes.body.success).toBe(true);
 
     // Clear
-    await request(app).delete('/api/elements/clear');
+    await request(app).delete('/api/elements/clear?confirm=true');
     expect(getAllElements()).toHaveLength(0);
 
     // Snapshot should still contain the elements
@@ -180,7 +180,7 @@ describe('Snapshot create and restore flow', () => {
     await request(app).post('/api/snapshots').send({ name: 'restore-test' });
 
     // Clear and add different elements
-    await request(app).delete('/api/elements/clear');
+    await request(app).delete('/api/elements/clear?confirm=true');
     setElement('different', makeElement({ id: 'different' }));
 
     // Get snapshot
