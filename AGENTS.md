@@ -1,12 +1,12 @@
 # AGENTS.md
 
-Agent instructions for mcp-excalidraw-local. Read this before starting any task.
+Agent instructions for excalidraw-mcp-sentinel. Read this before starting any task.
 
 ## What This Is
 
-A fully local, self-hosted Excalidraw MCP server. Single Node.js/TypeScript process
+A hardened, self-hosted Excalidraw MCP server (`excalidraw-mcp-sentinel`). Single Node.js/TypeScript process
 running an MCP server (stdio, 32 tools), an Express+WebSocket canvas server, and
-SQLite persistence with multi-tenancy.
+SQLite persistence with multi-tenancy. Forked from [sanjibdevnathlabs/mcp-excalidraw-local](https://github.com/sanjibdevnathlabs/mcp-excalidraw-local).
 
 ## Commands
 
@@ -100,7 +100,7 @@ All middleware lives here — do not duplicate in routes:
 
 ## Before `npm publish`
 
-- [ ] Bump `version` in `package.json` (current: `1.6.2`, next: `1.6.3`)
+- [ ] Bump `version` in `package.json` (current: `1.0.0`)
 - [ ] `npm test` → 369/369
 - [ ] `npm run build` → zero errors
 - [ ] `shipguard scan .` → 0 CRITICAL

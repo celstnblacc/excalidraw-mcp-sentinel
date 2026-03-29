@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 /**
- * Interactive setup wizard for mcp-excalidraw-local.
- * Runs via: npx @sanjibdevnath/mcp-excalidraw-local setup
+ * Interactive setup wizard for excalidraw-mcp-sentinel.
+ * Runs via: npx excalidraw-mcp-sentinel setup
  *
  * Uses only Node.js built-ins — no third-party dependencies.
  * Every phase is optional and skippable.
@@ -92,7 +92,7 @@ function getAgents(): AgentDef[] {
       },
       mcpConfigType: 'cli-command',
       mcpCliRemove: 'claude mcp remove excalidraw-canvas --scope user',
-      mcpCliCommand: 'claude mcp add excalidraw-canvas --scope user -e CANVAS_PORT=3000 -- npx -y @sanjibdevnath/mcp-excalidraw-local@latest',
+      mcpCliCommand: 'claude mcp add excalidraw-canvas --scope user -e CANVAS_PORT=3000 -- npx -y excalidraw-mcp-sentinel@latest',
       instructionConfig: {
         global: path.join(home, '.claude', 'CLAUDE.md'),
         local: path.join(process.cwd(), 'CLAUDE.md'),
@@ -493,7 +493,7 @@ async function phaseMcpConfig(rl: readline.Interface): Promise<void> {
 function mergeJsonConfig(configPath: string): void {
   const mcpEntry = {
     command: 'npx',
-    args: ['-y', '@sanjibdevnath/mcp-excalidraw-local@latest'],
+    args: ['-y', 'excalidraw-mcp-sentinel@latest'],
     env: { CANVAS_PORT: '3000' },
   };
 
@@ -549,7 +549,7 @@ function printManualConfig(): void {
       "mcpServers": {
         "excalidraw-canvas": {
           "command": "npx",
-          "args": ["-y", "@sanjibdevnath/mcp-excalidraw-local@latest"],
+          "args": ["-y", "excalidraw-mcp-sentinel@latest"],
           "env": { "CANVAS_PORT": "3000" }
         }
       }
@@ -619,7 +619,7 @@ export async function runUpdate(): Promise<void> {
     const skillSource = path.resolve(__dirname, '..', 'skills', 'excalidraw-skill');
     if (!fs.existsSync(skillSource)) {
       fail(`Skill source not found at ${skillSource}`);
-      fail('This can happen with corrupted installs. Try: npx @sanjibdevnath/mcp-excalidraw-local@latest setup');
+      fail('This can happen with corrupted installs. Try: npx excalidraw-mcp-sentinel@latest setup');
       rl.close();
       return;
     }

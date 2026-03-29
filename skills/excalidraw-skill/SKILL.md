@@ -11,7 +11,7 @@ Run these checks **in order**:
 
 1. **MCP Server** (best): If tools like `batch_create_elements` are available → use MCP mode.
 2. **REST API** (fallback): `curl -s http://localhost:3000/health` returns `{"status":"ok"}` → use REST API mode.
-3. **Nothing works**: Guide user to install (clone `sanjibdevnathlabs/mcp-excalidraw-local`, build, configure MCP).
+3. **Nothing works**: Guide user to install (clone `celstnblacc/excalidraw-mcp-sentinel`, build, configure MCP).
 
 See `references/cheatsheet.md` for the full MCP-vs-REST mapping and REST API gotchas.
 

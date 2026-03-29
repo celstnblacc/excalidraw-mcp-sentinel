@@ -5,6 +5,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-03-29
+
+### Changed
+- Renamed project from `@sanjibdevnath/mcp-excalidraw-local` to `excalidraw-mcp-sentinel`
+- New npm package name: `excalidraw-mcp-sentinel` (unscoped)
+- GitHub repo: `celstnblacc/excalidraw-mcp-sentinel`
+- Docker images: `celstnblacc/excalidraw-mcp-sentinel` and `celstnblacc/excalidraw-mcp-sentinel-canvas`
+- CLI binary renamed: `excalidraw-mcp-sentinel`
+- Version reset to 1.0.0 for independent release track
+- Added "Why this fork?" section to README with full attribution
+
+### Removed
+- Superseded planning docs (PLAN.md, PLAN_v2.md, REVIEW.md, HANDOFF.md)
+
 ## [1.6.3] - 2026-03-29
 
 ### Security
