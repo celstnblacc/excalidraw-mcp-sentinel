@@ -1298,7 +1298,7 @@ function App(): JSX.Element {
           initialData={{
             elements: [],
             appState: {
-              theme: 'light',
+              theme: 'dark',
               viewBackgroundColor: '#ffffff'
             }
           }}
