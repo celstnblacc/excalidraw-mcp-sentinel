@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-03-29
+
+### Fixed
+- `better-sqlite3` native module now rebuilt on install via `postinstall` script, fixing Node.js version mismatch errors (e.g. Node v22 vs v25) when installing via npx
+
 ## [1.0.0] - 2026-03-29
 
 ### Changed
