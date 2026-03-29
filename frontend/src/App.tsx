@@ -192,6 +192,45 @@ function App(): JSX.Element {
     return [...convertedNonImage, ...normalizedImages]
   }
 
+  // Expand server-format label.text into native Excalidraw bound text elements.
+  // Without this, labels stored as label.text on containers vanish on page reload
+  // because convertToExcalidrawElements silently drops them.
+  const expandLabelsToNative = (elements: any[]): any[] => {
+    const expanded: any[] = []
+    const LABEL_TYPES = new Set(['rectangle', 'ellipse', 'diamond', 'arrow'])
+    for (const el of elements) {
+      if (el.label?.text && LABEL_TYPES.has(el.type)) {
+        const boundTextId = `${el.id}_label`
+        const { label, ...rest } = el
+        // Container: add text binding, preserve existing non-text bindings
+        const existingBindings = (rest.boundElements || []).filter((b: any) => b.type !== 'text')
+        expanded.push({
+          ...rest,
+          boundElements: [...existingBindings, { id: boundTextId, type: 'text' }]
+        })
+        // Bound text element positioned at container center
+        expanded.push({
+          id: boundTextId, type: 'text', containerId: el.id,
+          x: (el.x ?? 0) + ((el.width ?? 100) / 2) - 20,
+          y: (el.y ?? 0) + ((el.height ?? 40) / 2) - 10,
+          width: el.width ?? 100, height: 25, angle: 0,
+          text: label.text, originalText: label.text,
+          fontSize: el.fontSize ?? 20, fontFamily: el.fontFamily ?? 5,
+          textAlign: 'center', verticalAlign: 'middle',
+          strokeColor: el.strokeColor ?? '#1e1e1e',
+          backgroundColor: 'transparent', fillStyle: 'solid',
+          strokeWidth: 1, strokeStyle: 'solid',
+          roughness: el.roughness ?? 1, opacity: el.opacity ?? 100,
+          groupIds: [], roundness: null, isDeleted: false,
+          autoResize: true, lineHeight: 1.25,
+        })
+      } else {
+        expanded.push(el)
+      }
+    }
+    return expanded
+  }
+
   const loadExistingElements = async (): Promise<void> => {
     try {
       const response = await fetch('/api/elements', { headers: tenantHeaders() })
@@ -204,12 +243,15 @@ function App(): JSX.Element {
           return
         }
         const cleanedElements = result.elements.map(cleanElementForExcalidraw)
-        const hasNativeFormat = cleanedElements.some((el: any) => el.containerId)
+        // Expand server-format label.text into native Excalidraw bound text
+        // elements so labels survive round-trips through the DB.
+        const expandedElements = expandLabelsToNative(cleanedElements)
+        const hasNativeFormat = expandedElements.some((el: any) => el.containerId)
         if (hasNativeFormat) {
-          const validated = validateAndFixBindings(cleanedElements)
+          const validated = validateAndFixBindings(expandedElements)
           excalidrawAPI?.updateScene({ elements: validated as any })
         } else {
-          const convertedElements = convertElementsPreservingImageProps(cleanedElements)
+          const convertedElements = convertElementsPreservingImageProps(expandedElements)
           excalidrawAPI?.updateScene({ elements: convertedElements })
         }
 
