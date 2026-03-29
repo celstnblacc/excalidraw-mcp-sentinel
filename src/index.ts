@@ -1033,18 +1033,15 @@ const server = new Server(
 // Helper function to convert text property to label format for Excalidraw
 function convertTextToLabel(element: ServerElement): ServerElement {
   const { text, ...rest } = element;
-  if (text) {
-    // For standalone text elements, keep text as direct property
-    if (element.type === 'text') {
-      return element; // Keep text as direct property
-    }
-    // For other elements (rectangle, ellipse, diamond), convert to label format
-    return {
-      ...rest,
-      label: { text }
-    } as ServerElement;
-  }
-  return element;
+  // text === undefined means the caller didn't touch the text field — leave as-is
+  if (text === undefined) return element;
+  // Standalone text elements keep text as a direct property
+  if (element.type === 'text') return element;
+  // All container/shape/arrow elements: map text → label.text (empty string clears it)
+  return {
+    ...rest,
+    label: { text }
+  } as ServerElement;
 }
 
 // Set up request handler for tool calls

@@ -53,3 +53,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - `getAllFilesObject()` helper extracted; `sendFilesAdded()` and `GET /api/files` share it
 - `sendLegacyInitialWsMessages` renamed to `sendAuthlessInitialMessages`
 - `.project-hooks/pre-commit` added to run vitest on every commit
+
+## [Unreleased] - 2026-03-30
+
+### Fixed
+- Bidirectional sync conflict: WS-applied updates no longer reverted by browser auto-sync (lastSyncedElementsRef now updated on element_updated, element_deleted, elements_batch_created)
+- Labeled container updates (rectangle, ellipse, diamond, arrow) now use convertToExcalidrawElements with ID transplant for correct text layout instead of in-place text patch that caused clipping
+- Standalone text element updates now write label.text into text/originalText fields so Excalidraw renders the new value
+- convertTextToLabel now maps text→label for arrows and empty strings (previously skipped falsy text)

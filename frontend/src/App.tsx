@@ -521,14 +521,67 @@ function App(): JSX.Element {
         case 'element_updated':
           if (data.element) {
             const cleanedUpdatedElement = cleanElementForExcalidraw(data.element)
-            const convertedUpdatedElement = convertToExcalidrawElements([cleanedUpdatedElement], { regenerateIds: false })[0]
-            const updatedElements = currentElements.map(el =>
-              el.id === data.element!.id ? convertedUpdatedElement : el
-            )
+            const newLabelText = data.element.label?.text
+            const isLabeledContainer = newLabelText !== undefined &&
+              ['rectangle', 'ellipse', 'diamond', 'arrow'].includes(data.element.type)
+            const isTextElement = data.element.type === 'text'
+
+            let updatedElements: any[]
+
+            if (isLabeledContainer) {
+              // Use convertToExcalidrawElements for correct text layout/metrics, but
+              // transplant the existing bound text element's ID so Excalidraw's internal
+              // state stays coherent (avoids orphan references and text clipping).
+              const existingBoundText = currentElements.find(
+                el => (el as any).containerId === data.element!.id
+              )
+              const convertedAll = convertToExcalidrawElements([cleanedUpdatedElement], { regenerateIds: false })
+              const convertedContainer = convertedAll[0] as any
+              const convertedBoundText = (convertedAll[1] ?? null) as any
+
+              if (existingBoundText && convertedBoundText) {
+                // Transplant existing bound text ID so container → text link is stable
+                const patchedBoundText = { ...convertedBoundText, id: (existingBoundText as any).id }
+                const patchedContainer = {
+                  ...convertedContainer,
+                  boundElements: [{ id: (existingBoundText as any).id, type: 'text' }]
+                }
+                updatedElements = [
+                  ...currentElements.filter(el => el.id !== data.element!.id && el.id !== (existingBoundText as any).id),
+                  patchedContainer,
+                  patchedBoundText
+                ]
+              } else {
+                // No existing bound text — use converted result as-is
+                updatedElements = [
+                  ...currentElements.filter(el => el.id !== data.element!.id && (el as any).containerId !== data.element!.id),
+                  ...(convertedBoundText ? [convertedContainer, convertedBoundText] : [convertedContainer])
+                ]
+              }
+            } else if (isTextElement) {
+              // For standalone text elements: write label.text into the text field
+              const textValue = newLabelText ?? (data.element as any).text ?? ''
+              updatedElements = currentElements.map(el =>
+                el.id === data.element!.id
+                  ? { ...(el as any), ...cleanedUpdatedElement, text: textValue, originalText: textValue }
+                  : el
+              )
+            } else {
+              // Generic element (arrows, etc.)
+              const convertedAll = convertToExcalidrawElements([cleanedUpdatedElement], { regenerateIds: false })
+              updatedElements = currentElements
+                .filter(el => (el as any).containerId !== data.element!.id)
+                .map(el => el.id === data.element!.id ? convertedAll[0] : el)
+            }
+
             api.updateScene({
               elements: updatedElements,
               captureUpdate: CaptureUpdateAction.NEVER
             })
+            // Update sync baseline so auto-sync doesn't overwrite this WS-applied change
+            const wsUpdatedBaseline = new Map(lastSyncedElementsRef.current)
+            wsUpdatedBaseline.set(data.element.id, data.element)
+            lastSyncedElementsRef.current = wsUpdatedBaseline
             sendAck(data.msgId, 'applied', 1, 1)
           }
           break
@@ -540,6 +593,10 @@ function App(): JSX.Element {
               elements: filteredElements,
               captureUpdate: CaptureUpdateAction.NEVER
             })
+            // Remove from sync baseline so auto-sync doesn't re-create it
+            const wsDeletedBaseline = new Map(lastSyncedElementsRef.current)
+            wsDeletedBaseline.delete(data.elementId)
+            lastSyncedElementsRef.current = wsDeletedBaseline
             sendAck(data.msgId, 'applied', 1, 1)
           }
           break
@@ -568,6 +625,12 @@ function App(): JSX.Element {
             const expectedIds = data.elements.map((e: ServerElement) => e.id)
             const landedCount = expectedIds.filter(id => scene.some(s => s.id === id)).length
             const status = landedCount === expectedIds.length ? 'applied' : landedCount > 0 ? 'partial' : 'failed'
+            // Update sync baseline so auto-sync doesn't treat these as new local changes
+            const wsBatchBaseline = new Map(lastSyncedElementsRef.current)
+            for (const el of data.elements) {
+              wsBatchBaseline.set(el.id, el)
+            }
+            lastSyncedElementsRef.current = wsBatchBaseline
             sendAck(data.msgId, status, landedCount, expectedIds.length)
           }
           break
