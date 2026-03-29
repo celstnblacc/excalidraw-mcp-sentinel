@@ -1,6 +1,6 @@
 {
   "name": "excalidraw-mcp-sentinel",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Hardened, self-hosted Excalidraw MCP server with SQLite persistence, multi-tenancy, auto-sync, security middleware, and 369 tests",
   "main": "dist/index.js",
   "type": "module",
@@ -17,6 +17,7 @@
     "dev": "concurrently \"npm run dev:server\" \"vite\"",
     "dev:server": "npx tsc --watch",
     "production": "npm run build && npm run canvas",
+    "postinstall": "npm rebuild better-sqlite3 --update-binary 2>/dev/null || true",
     "prepublishOnly": "npm run build",
     "setup": "node dist/index.js setup",
     "update": "node dist/index.js update",
