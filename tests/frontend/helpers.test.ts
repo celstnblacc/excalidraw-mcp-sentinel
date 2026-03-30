@@ -33,7 +33,8 @@ describe('cleanElementForExcalidraw', () => {
 
     expect(cleaned).not.toHaveProperty('createdAt');
     expect(cleaned).not.toHaveProperty('updatedAt');
-    expect(cleaned).not.toHaveProperty('version');
+    // version is kept — it is the Excalidraw element version, not a DB field
+    expect(cleaned).toHaveProperty('version', 3);
     expect(cleaned).not.toHaveProperty('syncedAt');
     expect(cleaned).not.toHaveProperty('source');
     expect(cleaned).not.toHaveProperty('syncTimestamp');
@@ -218,6 +219,21 @@ describe('computeElementHash', () => {
   it('includes element count in hash', () => {
     const hash = computeElementHash([{ id: 'x', version: 1 }]);
     expect(hash.startsWith('1')).toBe(true);
+  });
+
+  it('is order-stable for same id/version set', () => {
+    const a = [
+      { id: 'a', version: 1 },
+      { id: 'b', version: 3 },
+      { id: 'c', version: 2 },
+    ];
+    const b = [
+      { id: 'c', version: 2 },
+      { id: 'a', version: 1 },
+      { id: 'b', version: 3 },
+    ];
+
+    expect(computeElementHash(a)).toBe(computeElementHash(b));
   });
 });
 

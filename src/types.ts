@@ -143,6 +143,10 @@ export interface ServerElement extends Omit<ExcalidrawElementBase, 'id'> {
   end?: { id: string };
   startBinding?: ExcalidrawBinding | null;
   endBinding?: ExcalidrawBinding | null;
+  // Text alignment (bound text inside containers)
+  textAlign?: string;
+  verticalAlign?: string;
+  containerId?: string | null;
   // Image element properties
   fileId?: string;
   status?: string;

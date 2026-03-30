@@ -28,7 +28,8 @@
     "test:api": "vitest run tests/backend/api.test.ts",
     "test:ws": "vitest run tests/backend/ws.test.ts",
     "test:e2e": "npx playwright test",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "scan:similar-projects": "node scripts/scan-excalidraw-similar-projects.mjs"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.0",

@@ -38,7 +38,7 @@ node dist/server.js
 curl http://localhost:3000/health
 ```
 
-369 tests across unit, API, WebSocket, and regression suites. Run `npm test` or `pnpm test`. CI runs `type-check` then `build` then `test` across Node 18/20/22.
+446 tests across unit, API, WebSocket, and regression suites. Run `npm test` or `pnpm test`. CI runs `type-check` then `build` then `test` across Node 18/20/22.
 
 ## Architecture
 
@@ -112,12 +112,12 @@ Two Dockerfiles: `Dockerfile` (MCP server only), `Dockerfile.canvas` (canvas wit
 
 ### Security posture (as of 1.6.3)
 - `src/security.ts`: helmet, CORS allowlist, timing-safe API key auth, prototype pollution guard, 3-tier rate limiting, WS challenge-response auth, Mermaid input size cap
-- 369/369 tests passing; 4 regression tests cover previously crash-able sync paths
+- 446/446 tests passing; 4 regression tests cover previously crash-able sync paths
 - Docker: non-root user, resource limits, hardened `.dockerignore`
 
 ### Before running `npm publish`
-- [ ] Bump `version` in `package.json` to match `CHANGELOG.md` entry (currently `1.0.0`)
-- [ ] Run `npm test` — must be 369/369
+- [ ] Bump `version` in `package.json` to match `CHANGELOG.md` entry (currently `1.0.1`)
+- [ ] Run `npm test` — must be 446/446
 - [ ] Run `npm run build` — must be zero TS errors
 - [ ] Run `shipguard scan .` — must be 0 CRITICAL findings
 - [ ] Verify `CHANGELOG.md` has an entry for the version being published

@@ -105,7 +105,7 @@ describe('Rate limiting — destructive endpoints', () => {
 describe('Rate limiting — sync endpoints', () => {
   it('returns 429 after exceeding /api/elements/sync write-burst limit', async () => {
     const ip = '10.10.0.1';
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 30; i++) {
       await request(app)
         .post('/api/elements/sync')
         .set('X-Forwarded-For', ip)
@@ -122,7 +122,7 @@ describe('Rate limiting — sync endpoints', () => {
 
   it('returns 429 after exceeding /api/elements/sync/v2 write-burst limit', async () => {
     const ip = '10.10.0.2';
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 30; i++) {
       await request(app)
         .post('/api/elements/sync/v2')
         .set('X-Forwarded-For', ip)
@@ -139,7 +139,7 @@ describe('Rate limiting — sync endpoints', () => {
 
   it('sync 429 responses include rate-limit headers', async () => {
     const ip = '10.10.0.3';
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 30; i++) {
       await request(app)
         .post('/api/elements/sync')
         .set('X-Forwarded-For', ip)

@@ -42,7 +42,9 @@ export const cleanElementForExcalidraw = (element: ServerElement): Partial<Excal
   const {
     createdAt,
     updatedAt,
-    version,
+    // version is intentionally NOT stripped — it is the Excalidraw element version,
+    // preserved so browser-synced elements reload at their correct state without
+    // triggering convertToExcalidrawElements metric recalculation.
     syncedAt,
     source,
     syncTimestamp,
@@ -155,9 +157,12 @@ export const restoreBindings = (
 
 export const computeElementHash = (elements: readonly { id: string; version: number }[]): string => {
   let h = String(elements.length);
-  for (let i = 0; i < elements.length; i++) {
-    h += elements[i]!.id;
-    h += elements[i]!.version;
+  const pairs = elements
+    .map((element) => `${element.id}:${element.version}`)
+    .sort();
+
+  for (let i = 0; i < pairs.length; i++) {
+    h += pairs[i]!;
   }
   return h;
 };

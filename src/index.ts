@@ -13,7 +13,9 @@ import {
   CallToolRequestSchema, 
   ListToolsRequestSchema,
   CallToolRequest,
-  Tool
+  Tool,
+  McpError,
+  ErrorCode
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import dotenv from 'dotenv';
@@ -41,8 +43,10 @@ import {
   getElementHistory as dbGetElementHistory, getProjectHistory as dbGetProjectHistory,
   ensureTenant as dbEnsureTenant, setActiveTenant as dbSetActiveTenant,
   getActiveTenant as dbGetActiveTenant, getActiveTenantId as dbGetActiveTenantId,
+  getActiveProjectId as dbGetActiveProjectId,
   listTenants as dbListTenants
 } from './db.js';
+import { assertNoDangerousKeys } from './security.js';
 
 // Load environment variables
 dotenv.config();
@@ -335,6 +339,14 @@ const ElementSchema = z.object({
   elbowed: z.boolean().optional(),
   startElementId: z.string().optional(),
   endElementId: z.string().optional(),
+  textAlign: z.string().optional(),
+  verticalAlign: z.string().optional(),
+  title: z.string().optional(),
+  titleFontSize: z.number().optional(),
+  titleFontFamily: z.union([z.string(), z.number()]).optional(),
+  subtitle: z.string().optional(),
+  subtitleFontSize: z.number().optional(),
+  subtitleFontFamily: z.union([z.string(), z.number()]).optional(),
   endArrowhead: z.string().optional(),
   startArrowhead: z.string().optional(),
   fileId: z.string().optional(),
@@ -470,7 +482,7 @@ const DIAGRAM_DESIGN_GUIDE = `# Excalidraw Diagram Design Guide
 const tools: Tool[] = [
   {
     name: 'create_element',
-    description: 'Create a new Excalidraw element. For arrows, use startElementId/endElementId to bind to shapes (auto-routes to edges).',
+    description: 'Create a new Excalidraw element. For arrows, use startElementId/endElementId to bind to shapes (auto-routes to edges). For containers (rectangle, ellipse, diamond): use title+subtitle for a card layout with independent font styling — both are grouped so they move together.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -489,9 +501,17 @@ const tools: Tool[] = [
         strokeStyle: { type: 'string', description: 'Stroke style: solid, dashed, dotted' },
         roughness: { type: 'number' },
         opacity: { type: 'number' },
-        text: { type: 'string' },
+        text: { type: 'string', description: 'Simple label text (use title+subtitle instead for card layout)' },
         fontSize: { type: 'number' },
         fontFamily: { type: ['string', 'number'], description: FONT_FAMILY_DESCRIPTION },
+        textAlign: { type: 'string', description: 'Text horizontal alignment: left, center, right (default: center)' },
+        verticalAlign: { type: 'string', description: 'Text vertical alignment: top, middle (default: top for containers)' },
+        title: { type: 'string', description: 'Title text for card layout (bound to container, moves with it)' },
+        titleFontSize: { type: 'number', description: 'Title font size (default: 24)' },
+        titleFontFamily: { type: ['string', 'number'], description: 'Title font family (default: Nunito). ' + FONT_FAMILY_DESCRIPTION },
+        subtitle: { type: 'string', description: 'Subtitle/paragraph text (grouped with container, moves together)' },
+        subtitleFontSize: { type: 'number', description: 'Subtitle font size (default: 16)' },
+        subtitleFontFamily: { type: ['string', 'number'], description: 'Subtitle font family (default: Nunito). ' + FONT_FAMILY_DESCRIPTION },
         startElementId: { type: 'string', description: 'For arrows: ID of the element to bind the arrow start to. Arrow auto-routes to element edge.' },
         endElementId: { type: 'string', description: 'For arrows: ID of the element to bind the arrow end to. Arrow auto-routes to element edge.' },
         endArrowhead: { type: 'string', description: 'Arrowhead style at end: arrow, bar, dot, triangle, or null' },
@@ -1033,18 +1053,18 @@ const server = new Server(
 // Helper function to convert text property to label format for Excalidraw
 function convertTextToLabel(element: ServerElement): ServerElement {
   const { text, ...rest } = element;
-  if (text) {
-    // For standalone text elements, keep text as direct property
-    if (element.type === 'text') {
-      return element; // Keep text as direct property
-    }
-    // For other elements (rectangle, ellipse, diamond), convert to label format
-    return {
-      ...rest,
-      label: { text }
-    } as ServerElement;
-  }
-  return element;
+  // text === undefined means the caller didn't touch the text field — leave as-is
+  if (text === undefined) return element;
+  // Standalone text elements keep text as a direct property
+  if (element.type === 'text') return element;
+  // All container/shape/arrow elements: map text → label.text (empty string clears it)
+  // Default containers to top-center alignment for title/subtitle layout
+  const isArrow = element.type === 'arrow' || element.type === 'line';
+  return {
+    ...rest,
+    verticalAlign: (rest as any).verticalAlign ?? (isArrow ? 'middle' : 'top'),
+    label: { text }
+  } as ServerElement;
 }
 
 // Set up request handler for tool calls
@@ -1058,15 +1078,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         const params = ElementSchema.parse(args);
         logger.info('Creating element via MCP', { type: params.type });
 
-        const { startElementId, endElementId, id: customId, ...elementProps } = params;
+        const {
+          startElementId, endElementId, id: customId,
+          title, titleFontSize, titleFontFamily,
+          subtitle, subtitleFontSize, subtitleFontFamily,
+          ...elementProps
+        } = params;
         const id = customId || generateId();
         const normalizedFont = normalizeFontFamily(elementProps.fontFamily);
+
+        // Auto-populate title+subtitle for container types unless text is explicitly set
+        const CONTAINER_TYPES = new Set(['rectangle', 'ellipse', 'diamond']);
+        const isContainer = CONTAINER_TYPES.has(params.type);
+        const hasExplicitText = elementProps.text !== undefined;
+        const effectiveTitle = title ?? (isContainer && !hasExplicitText ? 'Title' : undefined);
+        const effectiveSubtitle = subtitle ?? (isContainer && !hasExplicitText && effectiveTitle ? 'Description' : undefined);
+
+        const effectiveText = effectiveTitle ?? elementProps.text;
+        const effectiveFontSize = effectiveTitle ? (titleFontSize ?? 24) : (elementProps.fontSize ?? USER_PREFS.fontSize);
+        const effectiveFontFamily = effectiveTitle
+          ? (normalizeFontFamily(titleFontFamily) ?? USER_PREFS.fontFamily)
+          : (normalizedFont ?? USER_PREFS.fontFamily);
+
         const element: ServerElement = {
           id,
           ...elementProps,
-          fontFamily: normalizedFont ?? USER_PREFS.fontFamily,
+          text: effectiveText,
+          fontFamily: effectiveFontFamily,
           roughness: elementProps.roughness ?? USER_PREFS.roughness,
-          fontSize: elementProps.fontSize ?? USER_PREFS.fontSize,
+          fontSize: effectiveFontSize,
           strokeWidth: elementProps.strokeWidth ?? USER_PREFS.strokeWidth,
           points: elementProps.points ? normalizePoints(elementProps.points) : undefined,
           ...(startElementId ? { start: { id: startElementId } } : {}),
@@ -1084,11 +1124,53 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         // Convert text to label format for Excalidraw
         const excalidrawElement = convertTextToLabel(element);
 
-        // Create element directly on HTTP server (no local storage)
+        // Card layout: title (bound) + subtitle (grouped standalone text)
+        const groupId = (effectiveTitle && effectiveSubtitle && isContainer) ? generateId() : undefined;
+
+        // Add groupId to container if using card layout
+        if (groupId) {
+          (excalidrawElement as any).groupIds = [groupId];
+        }
+
+        // Create the container element
         const canvasResponse = await createElementOnCanvas(excalidrawElement);
 
         if (!canvasResponse) {
           throw new Error('Failed to create element: HTTP server unavailable');
+        }
+
+        let subtitleResponse: any = null;
+
+        // Create subtitle as a grouped standalone text element
+        if (effectiveSubtitle && isContainer && groupId) {
+          const containerWidth = elementProps.width ?? 200;
+          const containerHeight = elementProps.height ?? 100;
+          const subtitleId = generateId();
+          const resolvedSubtitleFont = normalizeFontFamily(subtitleFontFamily) ?? USER_PREFS.fontFamily;
+          const resolvedSubtitleSize = subtitleFontSize ?? 16;
+
+          const subtitleElement: ServerElement = {
+            id: subtitleId,
+            type: 'text',
+            x: element.x + 10,
+            y: element.y + (containerHeight * 0.45),
+            width: containerWidth - 20,
+            height: containerHeight * 0.5,
+            text: effectiveSubtitle,
+            fontSize: resolvedSubtitleSize,
+            fontFamily: resolvedSubtitleFont,
+            textAlign: 'center',
+            verticalAlign: 'top',
+            strokeColor: elementProps.strokeColor ?? '#1e1e1e',
+            opacity: elementProps.opacity ?? 100,
+            roughness: elementProps.roughness ?? USER_PREFS.roughness,
+            groupIds: [groupId],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            version: 1
+          } as any;
+
+          subtitleResponse = await createElementOnCanvas(subtitleElement);
         }
 
         const synced = canvasResponse.syncedToCanvas ?? false;
@@ -1096,6 +1178,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           id: excalidrawElement.id,
           type: excalidrawElement.type,
           synced,
+          hasSubtitle: !!subtitleResponse,
           canvasStatus: canvasResponse.canvasStatus
         });
 
@@ -1104,10 +1187,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           ? 'Synced to canvas and confirmed by browser'
           : `Canvas sync not confirmed (${canvasResponse.canvasStatus?.reason ?? 'unknown'})`;
 
+        const subtitleInfo = subtitleResponse
+          ? `\n\nSubtitle element: ${subtitleResponse.element?.id ?? 'created'} (grouped)`
+          : '';
+
         return {
           content: [{
             type: 'text',
-            text: `Element created successfully!\n\n${JSON.stringify(canvasResponse.element ?? excalidrawElement, null, 2)}\n\n${statusEmoji} ${statusText}`
+            text: `Element created successfully!\n\n${JSON.stringify(canvasResponse.element ?? excalidrawElement, null, 2)}${subtitleInfo}\n\n${statusEmoji} ${statusText}`
           }]
         };
       }
@@ -1809,8 +1896,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           const safeImportPath = sanitizeFilePath(params.filePath);
           const fileContent = fs.readFileSync(safeImportPath, 'utf-8');
           sceneData = JSON.parse(fileContent);
+          assertNoDangerousKeys(sceneData, 'import_scene filePath');
         } else if (params.data) {
           sceneData = JSON.parse(params.data);
+          assertNoDangerousKeys(sceneData, 'import_scene data');
         } else {
           throw new Error('Either filePath or data must be provided');
         }
@@ -2369,7 +2458,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
             base.fontSize = rest.fontSize ?? USER_PREFS.fontSize;
             base.fontFamily = rest.fontFamily ?? USER_PREFS.fontFamily;
             base.textAlign = rest.textAlign ?? 'center';
-            base.verticalAlign = rest.verticalAlign ?? 'middle';
+            base.verticalAlign = rest.verticalAlign ?? (rest.containerId ? 'top' : 'middle');
             base.autoResize = rest.autoResize ?? true;
             base.lineHeight = rest.lineHeight ?? 1.25;
             base.containerId = rest.containerId ?? null;
@@ -2463,8 +2552,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
               originalText: labelText,
               fontSize: isArrow ? 14 : (rest.fontSize ?? USER_PREFS.fontSize),
               fontFamily: rest.fontFamily ?? USER_PREFS.fontFamily,
-              textAlign: 'center',
-              verticalAlign: 'middle',
+              textAlign: rest.textAlign ?? 'center',
+              verticalAlign: rest.verticalAlign ?? (isArrow ? 'middle' : 'top'),
               autoResize: true,
               lineHeight: 1.25,
               containerId: base.id
@@ -2627,7 +2716,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         const params = z.object({ query: z.string() }).parse(args);
         logger.info('Searching elements via MCP', { query: params.query });
 
-        const results = dbSearchElements(params.query);
+        const results = dbSearchElements(params.query, dbGetActiveProjectId());
         return {
           content: [{
             type: 'text',
@@ -2640,7 +2729,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
 
       case 'list_projects': {
         logger.info('Listing projects via MCP');
-        const projects = dbListProjects();
+        const projects = dbListProjects(dbGetActiveTenantId());
         const active = dbGetActiveProject();
         return {
           content: [{
@@ -2658,7 +2747,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         }).parse(args || {});
 
         if (params.createName) {
-          const newProject = dbCreateProject(params.createName, params.createDescription);
+          const newProject = dbCreateProject(params.createName, params.createDescription, dbGetActiveTenantId());
           dbSetActiveProject(newProject.id);
           logger.info('Created and switched to new project', { project: newProject });
           return {
@@ -2753,9 +2842,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
       }
 
       default:
-        throw new Error(`Unknown tool: ${name}`);
+        throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
   } catch (error) {
+    if (error instanceof McpError) {
+      throw error;
+    }
     logger.error(`Error handling tool call: ${(error as Error).message}`, { error });
     return {
       content: [{ type: 'text', text: `Error: ${(error as Error).message}` }],
@@ -2941,3 +3033,4 @@ if (isMainModule()) {
 }
 
 export default runServer;
+export { server, tools };

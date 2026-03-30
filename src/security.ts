@@ -111,6 +111,12 @@ export function sanitizeBody(req: Request, res: Response, next: NextFunction): v
   next();
 }
 
+export function assertNoDangerousKeys(obj: unknown, context = 'input'): void {
+  if (hasDangerousKey(obj)) {
+    throw new Error(`${context} contains disallowed keys (__proto__, constructor, prototype)`);
+  }
+}
+
 // ── Mermaid Input Validation ──────────────────────────────────────────────────
 const MAX_MERMAID_LENGTH = 50 * 1024; // 50 KB
 const MAX_MERMAID_CONFIG_KEYS = 10;
@@ -137,7 +143,7 @@ export function validateMermaidInput(req: Request, res: Response, next: NextFunc
 // General limit for all /api routes.
 export const generalRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: getEnvInt('EXCALIDRAW_RATE_LIMIT_GENERAL_MAX', 100),
+  max: getEnvInt('EXCALIDRAW_RATE_LIMIT_GENERAL_MAX', 500),
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { success: false, error: 'Too many requests, please try again later.' },
@@ -155,7 +161,7 @@ export const destructiveRateLimit = rateLimit({
 // Stricter limit for write-heavy sync operations.
 export const writeBurstLimit = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: getEnvInt('EXCALIDRAW_RATE_LIMIT_WRITE_BURST_MAX', 10),
+  max: getEnvInt('EXCALIDRAW_RATE_LIMIT_WRITE_BURST_MAX', 30),
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { success: false, error: 'Too many sync operations, please slow down.' },
@@ -205,7 +211,7 @@ export function sanitizeSearchQuery(query: string): string {
   if (/\b(?:AND|OR|NOT|NEAR(?:\/\d+)?)\b/i.test(trimmed)) {
     throw new InvalidSearchQueryError();
   }
-  if (/[*(){}^]/.test(trimmed)) {
+  if (/[*(){}^:]/.test(trimmed)) {
     throw new InvalidSearchQueryError();
   }
 

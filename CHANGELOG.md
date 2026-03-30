@@ -5,6 +5,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+### Added
+- `frontend/src/utils/scenePreparation.ts` with scene-preparation utilities (`expandLabelsToNative`, `prepareElementsForScene`, `convertElementsPreservingImageProps`)
+- Backend tests: `tests/backend/db-unit.test.ts`, `tests/backend/mcp-contract.test.ts`, `tests/backend/mcp-sanitization.test.ts`, `tests/backend/security-unit.test.ts`, `tests/backend/smoke-ws.test.ts`, `tests/backend/tenant-authz-behavior.test.ts`
+- Frontend test: `tests/frontend/scene-preparation.test.ts`
+- E2E regression suite: `tests/e2e/phase2-regressions.spec.ts`
+
+### Changed
+- `computeElementHash` is now order-stable for equivalent element sets
+- `frontend/src/App.tsx` now uses centralized scene-preparation utilities for label expansion and native-vs-converted routing
+- Documentation test counts updated to `443`
+
+### Fixed
+- MCP unknown tool calls now return JSON-RPC `MethodNotFound` (`-32601`)
+- `import_scene` now enforces dangerous-key checks on parsed scene payloads before processing
+- Double WebSocket connection race: guard now also blocks `CONNECTING` state, preventing a second WS from seeding `knownContainerIdsRef` prematurely
+- Title/subtitle auto-injection for WS-delivered container elements: `handleCanvasChange()` now called explicitly after `element_created` updates scene (Excalidraw's `CaptureUpdateAction.NEVER` suppresses the `onChange` callback)
+- Curved arrow control points remain deformable after sync round-trip (merge strategy preserves Excalidraw internals)
+- E2E: `curved arrow stays deformable after sync round-trip` regression test passing
+- `textAlign`, `verticalAlign`, `containerId` added to `ElementSharedFieldsSchema` in `server.ts` — Zod was silently stripping these fields on every REST round-trip, causing bound text to lose centering after sync
+- `ServerElement` type updated with `textAlign?`, `verticalAlign?`, `containerId?` to match schema
+- Subtitle element in MCP `create_element` now sets `textAlign: "center"` and `verticalAlign: "top"`
+- E2E: `new container arrival auto-injects title and subtitle text` now reliably passes with the double-WS fix
+
 ## [1.0.1] - 2026-03-29
 
 ### Fixed
@@ -53,3 +76,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - `getAllFilesObject()` helper extracted; `sendFilesAdded()` and `GET /api/files` share it
 - `sendLegacyInitialWsMessages` renamed to `sendAuthlessInitialMessages`
 - `.project-hooks/pre-commit` added to run vitest on every commit
+
+## [Unreleased] - 2026-03-30
+
+### Fixed
+- Bidirectional sync conflict: WS-applied updates no longer reverted by browser auto-sync (lastSyncedElementsRef now updated on element_updated, element_deleted, elements_batch_created)
+- Labeled container updates (rectangle, ellipse, diamond, arrow) now use convertToExcalidrawElements with ID transplant for correct text layout instead of in-place text patch that caused clipping
+- Standalone text element updates now write label.text into text/originalText fields so Excalidraw renders the new value
+- convertTextToLabel now maps text→label for arrows and empty strings (previously skipped falsy text)
+
+### Changed
+- Default theme set to dark
+
+### Fixed
+- Labels stored as label.text (e.g. from MCP updates) now survive page refresh — expandLabelsToNative pre-converts them to bound text before Excalidraw renders

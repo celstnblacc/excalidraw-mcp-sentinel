@@ -51,7 +51,7 @@ describe('Middleware order', () => {
 
   it('401 with bad API key is still rate-limited', async () => {
     const ip = '10.20.0.3';
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 500; i++) {
       await request(app)
         .get('/api/elements')
         .set('X-API-Key', 'wrong-key')

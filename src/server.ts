@@ -487,6 +487,10 @@ const ElementSharedFieldsSchema = z.object({
   endBinding: z.any().nullable().optional(),
   boundElements: z.any().nullable().optional(),
   elbowed: z.boolean().optional(),
+  // Text alignment properties (required for bound text inside containers)
+  textAlign: z.string().optional(),
+  verticalAlign: z.string().optional(),
+  containerId: z.string().nullable().optional(),
   // Image element properties
   fileId: z.string().optional(),
   status: z.string().optional(),
