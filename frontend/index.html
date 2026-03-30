@@ -108,6 +108,63 @@
             position: relative;
         }
 
+        /* Widen Excalidraw left properties panel */
+        .App-menu_left .Island {
+            min-width: 260px;
+        }
+
+        /* Draggable font size widget */
+        .custom-font-size-widget {
+            position: fixed;
+            z-index: 100;
+            background: var(--island-bg-color, #232329);
+            border-radius: 8px;
+            padding: 6px 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: grab;
+            user-select: none;
+        }
+        .custom-font-size-widget.dragging {
+            cursor: grabbing;
+            opacity: 0.9;
+        }
+        .custom-font-size-widget label {
+            font-size: 12px;
+            color: #aaa;
+            white-space: nowrap;
+            cursor: grab;
+        }
+        .custom-font-size-widget input[type="number"] {
+            width: 52px;
+            padding: 4px 6px;
+            font-size: 13px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background: #1a1a2e;
+            color: #fff;
+            text-align: center;
+            cursor: text;
+        }
+        .custom-font-size-widget input[type="number"]:focus {
+            outline: none;
+            border-color: #4a6cf7;
+        }
+        .custom-font-size-widget button {
+            padding: 4px 10px;
+            font-size: 12px;
+            border: none;
+            border-radius: 4px;
+            background: #4a6cf7;
+            color: #fff;
+            cursor: pointer;
+        }
+        .custom-font-size-widget button:hover {
+            background: #3a5ce5;
+        }
+
         
         .api-panel {
             position: fixed;

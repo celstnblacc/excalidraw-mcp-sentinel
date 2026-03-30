@@ -137,7 +137,7 @@ export function validateMermaidInput(req: Request, res: Response, next: NextFunc
 // General limit for all /api routes.
 export const generalRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: getEnvInt('EXCALIDRAW_RATE_LIMIT_GENERAL_MAX', 100),
+  max: getEnvInt('EXCALIDRAW_RATE_LIMIT_GENERAL_MAX', 500),
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { success: false, error: 'Too many requests, please try again later.' },
@@ -155,7 +155,7 @@ export const destructiveRateLimit = rateLimit({
 // Stricter limit for write-heavy sync operations.
 export const writeBurstLimit = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: getEnvInt('EXCALIDRAW_RATE_LIMIT_WRITE_BURST_MAX', 10),
+  max: getEnvInt('EXCALIDRAW_RATE_LIMIT_WRITE_BURST_MAX', 30),
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { success: false, error: 'Too many sync operations, please slow down.' },

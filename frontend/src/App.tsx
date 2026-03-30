@@ -87,6 +87,21 @@ function App(): JSX.Element {
 
   const DEBOUNCE_MS = 3000
 
+  // Track known container IDs to auto-inject title on new shapes
+  const knownContainerIdsRef = useRef<Set<string>>(new Set())
+  const CONTAINER_TYPES = new Set(['rectangle', 'ellipse', 'diamond'])
+
+  // Custom font size input state
+  const [customFontSize, setCustomFontSize] = useState<string>('')
+
+  // Draggable widget state — default near top menu
+  const [widgetPos, setWidgetPos] = useState<{x: number, y: number}>(() => {
+    const saved = localStorage.getItem('font-widget-pos')
+    return saved ? JSON.parse(saved) : { x: window.innerWidth * 0.55, y: 90 }
+  })
+  const [isDragging, setIsDragging] = useState(false)
+  const dragOffset = useRef<{x: number, y: number}>({x: 0, y: 0})
+
   // Tenant state
   const [activeTenant, setActiveTenant] = useState<TenantInfo | null>(null)
   const activeTenantIdRef = useRef<string | null>(null)
@@ -157,9 +172,117 @@ function App(): JSX.Element {
     }
   }, [])
 
+  // Apply custom font size to selected elements
+  const applyCustomFontSize = (size: number): void => {
+    const api = excalidrawAPIRef.current
+    if (!api || !size || size < 1) return
+
+    const appState = api.getAppState()
+    const selectedIds = appState.selectedElementIds || {}
+    const scene = api.getSceneElements()
+    const updated = scene.map((el: any) => {
+      if (selectedIds[el.id] && (el.type === 'text' || (el as any).fontSize !== undefined)) {
+        return { ...el, fontSize: size }
+      }
+      return el
+    })
+    api.updateScene({ elements: updated, captureUpdate: CaptureUpdateAction.IMMEDIATELY })
+  }
+
+  // Pending title injection — deferred to avoid updateScene inside onChange
+  const pendingTitleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // Trailing debounce: resets on every change, fires after user is idle.
   // Only active when auto-save is on.
   const handleCanvasChange = (): void => {
+    // Auto-inject title into new containers (rectangle, ellipse, diamond)
+    // Deferred: collect candidates, inject after onChange completes
+    if (pendingTitleTimerRef.current) clearTimeout(pendingTitleTimerRef.current)
+    pendingTitleTimerRef.current = setTimeout(() => {
+      const api = excalidrawAPIRef.current
+      if (!api) return
+
+      const elements = api.getSceneElements()
+      const newContainers: typeof elements[number][] = []
+
+      for (const el of elements) {
+        if (
+          CONTAINER_TYPES.has(el.type) &&
+          !el.isDeleted &&
+          !knownContainerIdsRef.current.has(el.id) &&
+          el.width > 30 && el.height > 30
+        ) {
+          const hasBoundText = (el as any).boundElements?.some((b: any) => b.type === 'text')
+          if (!hasBoundText) {
+            newContainers.push(el)
+          }
+          knownContainerIdsRef.current.add(el.id)
+        }
+      }
+
+      if (newContainers.length > 0) {
+        const scene = api.getSceneElements()
+        const updated = [...scene] as any[]
+
+        for (const container of newContainers) {
+          const groupId = `${container.id}_group`
+          const textId = `${container.id}_title`
+          const subtitleId = `${container.id}_subtitle`
+
+          // Center-based positioning — works for all shapes
+          const cx = container.x + container.width / 2
+          const cy = container.y + container.height / 2
+
+          // Title — 15% above center
+          const titleConverted = convertToExcalidrawElements([{
+            type: 'text' as const,
+            id: textId,
+            x: cx,
+            y: cy - container.height * 0.15,
+            text: 'Title',
+            fontSize: 24,
+            fontFamily: 6,
+            textAlign: 'center' as const,
+            strokeColor: '#1e1e1e',
+          }], { regenerateIds: false })
+          const titleText = titleConverted.map((el: any) => ({
+            ...el,
+            groupIds: [groupId],
+          }))
+
+          // Subtitle — 10% below center
+          const subtitleConverted = convertToExcalidrawElements([{
+            type: 'text' as const,
+            id: subtitleId,
+            x: cx,
+            y: cy + container.height * 0.10,
+            text: 'Text here',
+            fontSize: 16,
+            fontFamily: 6,
+            textAlign: 'center' as const,
+            strokeColor: '#868e96',
+          }], { regenerateIds: false })
+          const subtitleText = subtitleConverted.map((el: any) => ({
+            ...el,
+            groupIds: [groupId],
+          }))
+
+          // Add group to container
+          const idx = updated.findIndex((e: any) => e.id === container.id)
+          if (idx >= 0) {
+            const existingGroups = (updated[idx] as any).groupIds || []
+            updated[idx] = {
+              ...updated[idx],
+              groupIds: [...existingGroups, groupId]
+            }
+          }
+          updated.push(...titleText, ...subtitleText)
+        }
+
+        api.updateScene({ elements: updated, captureUpdate: CaptureUpdateAction.IMMEDIATELY })
+      }
+    }, 300) // 300ms delay — fires after drawing finishes
+
     if (!autoSave) return
 
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
@@ -167,8 +290,8 @@ function App(): JSX.Element {
     debounceTimerRef.current = setTimeout(() => {
       if (!excalidrawAPI || isSyncingRef.current) return
 
-      const elements = excalidrawAPI.getSceneElements()
-      const hash = computeElementHash(elements)
+      const currentElements = excalidrawAPI.getSceneElements()
+      const hash = computeElementHash(currentElements)
       if (hash === lastSyncedHashRef.current) return
 
       syncToBackend()
@@ -243,17 +366,37 @@ function App(): JSX.Element {
           return
         }
         const cleanedElements = result.elements.map(cleanElementForExcalidraw)
+        // Save original geometry for all DB elements — convertToExcalidrawElements
+        // recalculates metrics and shifts positions for text, containers, and arrows
+        const originalGeometry = new Map<string, { x: number; y: number; width: number; height: number }>()
+        for (const el of cleanedElements) {
+          if (el.x != null && el.y != null) {
+            originalGeometry.set(el.id, { x: el.x, y: el.y, width: (el as any).width ?? 0, height: (el as any).height ?? 0 })
+          }
+        }
         // Expand server-format label.text into native Excalidraw bound text
         // elements so labels survive round-trips through the DB.
         const expandedElements = expandLabelsToNative(cleanedElements)
-        const hasNativeFormat = expandedElements.some((el: any) => el.containerId)
-        if (hasNativeFormat) {
-          const validated = validateAndFixBindings(expandedElements)
-          excalidrawAPI?.updateScene({ elements: validated as any })
-        } else {
-          const convertedElements = convertElementsPreservingImageProps(expandedElements)
-          excalidrawAPI?.updateScene({ elements: convertedElements })
+        // Convert through Excalidraw to get proper element objects
+        // (with seed, version, versionNonce, etc.)
+        const convertedElements = convertElementsPreservingImageProps(expandedElements)
+        // Restore original geometry for elements that existed in the DB
+        // (skip synthetic elements created by expandLabelsToNative)
+        const finalElements = convertedElements.map((el: any) => {
+          const orig = originalGeometry.get(el.id)
+          if (orig) {
+            return { ...el, x: orig.x, y: orig.y, width: orig.width, height: orig.height }
+          }
+          return el
+        })
+        // Seed known containers BEFORE updateScene so onChange doesn't re-inject titles
+        for (const el of finalElements) {
+          if (CONTAINER_TYPES.has((el as any).type)) {
+            knownContainerIdsRef.current.add((el as any).id)
+          }
         }
+
+        excalidrawAPI?.updateScene({ elements: finalElements })
 
         // Populate sync baseline so deletions are detected on next sync
         const baselineMap = new Map<string, ServerElement>()
@@ -475,6 +618,12 @@ function App(): JSX.Element {
           const cleanedElements = data.elements.map(cleanElementForExcalidraw)
           const validatedElements = validateAndFixBindings(cleanedElements)
           const convertedElements = convertElementsPreservingImageProps(validatedElements)
+          // Seed known containers before updateScene
+          for (const el of convertedElements) {
+            if (CONTAINER_TYPES.has((el as any).type)) {
+              knownContainerIdsRef.current.add((el as any).id)
+            }
+          }
           api.updateScene({
             elements: convertedElements,
             captureUpdate: CaptureUpdateAction.NEVER
@@ -522,6 +671,11 @@ function App(): JSX.Element {
             const cleanedElements = data.elements.map(cleanElementForExcalidraw)
             const validatedElements = validateAndFixBindings(cleanedElements)
             const convertedElements = convertElementsPreservingImageProps(validatedElements)
+            for (const el of convertedElements) {
+              if (CONTAINER_TYPES.has((el as any).type)) {
+                knownContainerIdsRef.current.add((el as any).id)
+              }
+            }
             api.updateScene({
               elements: convertedElements,
               captureUpdate: CaptureUpdateAction.NEVER
@@ -952,18 +1106,14 @@ function App(): JSX.Element {
 
     const result: ServerElement[] = []
     for (const el of elements) {
-      if (boundTextIds.has(el.id)) continue // skip bound text — merged into container
-
+      // Keep bound text elements as-is — store native Excalidraw format
+      // so x/y/width/height survive round-trips without recalculation
       const out: any = { ...el }
 
-      // If this container has bound text, put it back as label.text
-      const merged = containerTextMap.get(el.id)
-      if (merged && merged.text) {
-        out.label = { text: merged.text }
-        if (merged.fontSize) out.fontSize = merged.fontSize
-        if (merged.fontFamily) out.fontFamily = merged.fontFamily
-        // Clean up Excalidraw-internal binding metadata
-        delete out.boundElements
+      // Strip label.text from containers that have native bound text,
+      // so the load path doesn't double-create text elements
+      if (containerTextMap.has(el.id)) {
+        delete out.label
       }
 
       // Normalize arrow bindings from Excalidraw format back to MCP format
@@ -1112,11 +1262,15 @@ function App(): JSX.Element {
                 merged = merged.filter(el => el.id !== sc.id)
               } else if (sc.element) {
                 const cleaned = cleanElementForExcalidraw(sc.element)
-                const converted = convertToExcalidrawElements([cleaned], { regenerateIds: false })
                 const idx = merged.findIndex(el => el.id === sc.id)
+
                 if (idx >= 0) {
-                  merged[idx] = converted[0]!
+                  // Existing element: spread-merge to preserve geometry and
+                  // Excalidraw internals (seed, version, versionNonce)
+                  merged[idx] = { ...merged[idx], ...cleaned } as any
                 } else {
+                  // New element from MCP/other tab: must convert to get proper internals
+                  const converted = convertToExcalidrawElements([cleaned], { regenerateIds: false })
                   merged.push(...converted)
                 }
               }
@@ -1332,6 +1486,53 @@ function App(): JSX.Element {
           </div>
         </div>
       )}
+
+      {/* Draggable font size widget */}
+      <div
+        className={`custom-font-size-widget${isDragging ? ' dragging' : ''}`}
+        style={{ left: widgetPos.x, top: widgetPos.y }}
+        onMouseDown={e => {
+          // Don't drag when clicking input or button
+          if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'BUTTON') return
+          setIsDragging(true)
+          dragOffset.current = { x: e.clientX - widgetPos.x, y: e.clientY - widgetPos.y }
+          const onMove = (ev: MouseEvent) => {
+            const newPos = { x: ev.clientX - dragOffset.current.x, y: ev.clientY - dragOffset.current.y }
+            setWidgetPos(newPos)
+          }
+          const onUp = () => {
+            setIsDragging(false)
+            setWidgetPos(prev => {
+              localStorage.setItem('font-widget-pos', JSON.stringify(prev))
+              return prev
+            })
+            window.removeEventListener('mousemove', onMove)
+            window.removeEventListener('mouseup', onUp)
+          }
+          window.addEventListener('mousemove', onMove)
+          window.addEventListener('mouseup', onUp)
+        }}
+      >
+        <label>Font px</label>
+        <input
+          type="number"
+          min="1"
+          max="200"
+          placeholder="size"
+          value={customFontSize}
+          onChange={e => setCustomFontSize(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              const size = parseInt(customFontSize, 10)
+              if (size > 0) applyCustomFontSize(size)
+            }
+          }}
+        />
+        <button onClick={() => {
+          const size = parseInt(customFontSize, 10)
+          if (size > 0) applyCustomFontSize(size)
+        }}>Set</button>
+      </div>
 
       {/* Canvas Container */}
       <div className="canvas-container">
