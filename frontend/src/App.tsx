@@ -363,7 +363,9 @@ function App(): JSX.Element {
     if (!reconnectEnabledRef.current) {
       return
     }
-    if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
+    if (websocketRef.current &&
+        (websocketRef.current.readyState === WebSocket.OPEN ||
+         websocketRef.current.readyState === WebSocket.CONNECTING)) {
       return
     }
 
@@ -445,13 +447,17 @@ function App(): JSX.Element {
             if (sc.action === 'delete') {
               merged = merged.filter(el => el.id !== sc.id)
             } else if (sc.element) {
-              const cleaned = cleanElementForExcalidraw(sc.element)
-              const converted = convertToExcalidrawElements([cleaned], { regenerateIds: false })
+              const preparedIncoming = prepareElementsForScene([sc.element], convertToExcalidrawElements as any)
+              const incoming = preparedIncoming[0] as any | undefined
               const idx = merged.findIndex(el => el.id === sc.id)
+              if (!incoming) {
+                continue
+              }
               if (idx >= 0) {
-                merged[idx] = converted[0]!
+                // Merge to preserve local Excalidraw internals needed for point editing.
+                merged[idx] = { ...merged[idx], ...incoming } as any
               } else {
-                merged.push(...converted)
+                merged.push(...preparedIncoming)
               }
             }
           }
@@ -624,6 +630,10 @@ function App(): JSX.Element {
                 captureUpdate: CaptureUpdateAction.NEVER
               })
             }
+            // CaptureUpdateAction.NEVER does not trigger the onChange callback, so
+            // title injection (handleCanvasChange) won't fire automatically. Call it
+            // explicitly so new container elements get their Title/subtitle text.
+            handleCanvasChange()
             const scene = api.getSceneElements()
             const landed = scene.some(s => s.id === data.element!.id)
             sendAck(data.msgId, landed ? 'applied' : 'failed', landed ? 1 : 0, 1)
@@ -680,10 +690,11 @@ function App(): JSX.Element {
               )
             } else {
               // Generic element (arrows, etc.)
-              const convertedAll = convertToExcalidrawElements([cleanedUpdatedElement], { regenerateIds: false })
+              const preparedUpdated = prepareElementsForScene([data.element], convertToExcalidrawElements as any)
+              const nextUpdatedElement = (preparedUpdated[0] ?? cleanedUpdatedElement) as any
               updatedElements = currentElements
                 .filter(el => (el as any).containerId !== data.element!.id)
-                .map(el => el.id === data.element!.id ? convertedAll[0] : el)
+                .map(el => el.id === data.element!.id ? { ...(el as any), ...nextUpdatedElement } : el)
             }
 
             api.updateScene({
@@ -1175,17 +1186,19 @@ function App(): JSX.Element {
               if (sc.action === 'delete') {
                 merged = merged.filter(el => el.id !== sc.id)
               } else if (sc.element) {
-                const cleaned = cleanElementForExcalidraw(sc.element)
+                const preparedIncoming = prepareElementsForScene([sc.element], convertToExcalidrawElements as any)
+                const incoming = preparedIncoming[0] as any | undefined
                 const idx = merged.findIndex(el => el.id === sc.id)
+                if (!incoming) continue
 
                 if (idx >= 0) {
                   // Existing element: spread-merge to preserve geometry and
                   // Excalidraw internals (seed, version, versionNonce)
-                  merged[idx] = { ...merged[idx], ...cleaned } as any
+                  merged[idx] = { ...merged[idx], ...incoming } as any
                 } else {
-                  // New element from MCP/other tab: must convert to get proper internals
-                  const converted = convertToExcalidrawElements([cleaned], { regenerateIds: false })
-                  merged.push(...converted)
+                  // New element from MCP/other tab: native browser elements pass through,
+                  // MCP stubs get converted by prepareElementsForScene.
+                  merged.push(...preparedIncoming)
                 }
               }
             }

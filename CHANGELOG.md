@@ -19,6 +19,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 ### Fixed
 - MCP unknown tool calls now return JSON-RPC `MethodNotFound` (`-32601`)
 - `import_scene` now enforces dangerous-key checks on parsed scene payloads before processing
+- Double WebSocket connection race: guard now also blocks `CONNECTING` state, preventing a second WS from seeding `knownContainerIdsRef` prematurely
+- Title/subtitle auto-injection for WS-delivered container elements: `handleCanvasChange()` now called explicitly after `element_created` updates scene (Excalidraw's `CaptureUpdateAction.NEVER` suppresses the `onChange` callback)
+- Curved arrow control points remain deformable after sync round-trip (merge strategy preserves Excalidraw internals)
+- E2E: `curved arrow stays deformable after sync round-trip` regression test passing
+- E2E: `new container arrival auto-injects title and subtitle text` now reliably passes with the double-WS fix
 
 ## [1.0.1] - 2026-03-29
 

@@ -10,6 +10,13 @@ async function waitForConnected(page: Page): Promise<void> {
   await expect(page.locator('.status span')).toContainText('Connected', { timeout: 5000 });
 }
 
+async function getElement(request: any, id: string): Promise<any> {
+  const res = await request.get(`${API}/api/elements/${id}`);
+  expect(res.ok()).toBe(true);
+  const body = await res.json() as { element: any };
+  return body.element;
+}
+
 test.beforeEach(async ({ request }) => {
   await resetCanvas(request);
 });
@@ -148,5 +155,93 @@ test.describe('Phase 2 regressions', () => {
     }, { timeout: 6000 }).toBe(true);
 
     await page2.close();
+  });
+
+  test('curved arrow stays deformable after sync round-trip', async ({ page, request }) => {
+    const arrowId = 'curve-sync-1';
+    const initialPoints: [number, number][] = [[0, 0], [170, -90], [300, 50]];
+    const deformedPoints: [number, number][] = [[0, 0], [120, -150], [330, 70]];
+
+    await request.post(`${API}/api/elements`, {
+      data: {
+        id: arrowId,
+        type: 'arrow',
+        x: 220,
+        y: 190,
+        width: 300,
+        height: 120,
+        points: initialPoints,
+        roundness: { type: 2 },
+        strokeColor: '#1e1e1e',
+        backgroundColor: 'transparent',
+        fillStyle: 'hachure',
+        strokeWidth: 2,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        angle: 0,
+        groupIds: [],
+        frameId: null,
+        boundElements: null,
+        locked: false,
+        seed: 123456,
+        versionNonce: 654321,
+        version: 1,
+        isDeleted: false,
+      },
+    });
+
+    await page.goto('/');
+    await waitForConnected(page);
+    await page.waitForTimeout(900);
+
+    await page.getByRole('button', { name: /^Sync$/ }).click();
+    await page.waitForTimeout(350);
+
+    const updateRes = await request.put(`${API}/api/elements/${arrowId}`, {
+      data: {
+        points: deformedPoints,
+        roundness: { type: 2 },
+      },
+    });
+    expect(updateRes.ok()).toBe(true);
+
+    await page.waitForTimeout(900);
+    await page.getByRole('button', { name: /^Sync$/ }).click();
+
+    await expect.poll(async () => {
+      const updated = await getElement(request, arrowId);
+      const points = (updated.points ?? []) as [number, number][];
+      return {
+        midX: points[1]?.[0],
+        midY: points[1]?.[1],
+        roundnessType: updated.roundness?.type ?? null,
+      };
+    }, { timeout: 7000 }).toEqual({
+      midX: deformedPoints[1]![0],
+      midY: deformedPoints[1]![1],
+      roundnessType: 2,
+    });
+
+    const finalArrow = await getElement(request, arrowId) as {
+      points: [number, number][];
+      roundness?: { type?: number };
+    };
+
+    expect(finalArrow.roundness?.type).toBe(2);
+    expect(Array.isArray(finalArrow.points)).toBe(true);
+    expect(finalArrow.points.length).toBe(3);
+
+    // Excalidraw may normalize edge points to half-pixel coordinates.
+    expect(Math.abs(finalArrow.points[0]![0] - deformedPoints[0]![0])).toBeLessThanOrEqual(1);
+    expect(Math.abs(finalArrow.points[0]![1] - deformedPoints[0]![1])).toBeLessThanOrEqual(1);
+    expect(finalArrow.points[1]![0]).toBe(deformedPoints[1]![0]);
+    expect(finalArrow.points[1]![1]).toBe(deformedPoints[1]![1]);
+    expect(Math.abs(finalArrow.points[2]![0] - deformedPoints[2]![0])).toBeLessThanOrEqual(1);
+    expect(Math.abs(finalArrow.points[2]![1] - deformedPoints[2]![1])).toBeLessThanOrEqual(1);
+
+    // Ensure shape actually deformed away from the initial geometry.
+    expect(finalArrow.points[1]![0]).not.toBe(initialPoints[1]![0]);
+    expect(finalArrow.points[1]![1]).not.toBe(initialPoints[1]![1]);
   });
 });
