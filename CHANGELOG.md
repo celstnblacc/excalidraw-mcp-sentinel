@@ -5,28 +5,34 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-03-30
+
 ### Added
-- `frontend/src/utils/scenePreparation.ts` with scene-preparation utilities (`expandLabelsToNative`, `prepareElementsForScene`, `convertElementsPreservingImageProps`)
-- Backend tests: `tests/backend/db-unit.test.ts`, `tests/backend/mcp-contract.test.ts`, `tests/backend/mcp-sanitization.test.ts`, `tests/backend/security-unit.test.ts`, `tests/backend/smoke-ws.test.ts`, `tests/backend/tenant-authz-behavior.test.ts`
-- Frontend test: `tests/frontend/scene-preparation.test.ts`
-- E2E regression suite: `tests/e2e/phase2-regressions.spec.ts`
+- `frontend/src/utils/scenePreparation.ts` — centralized scene-preparation utilities (`expandLabelsToNative`, `prepareElementsForScene`, `convertElementsPreservingImageProps`)
+- E2E regression suite: `tests/e2e/phase2-regressions.spec.ts` (4 tests: position stability, auto-title, two-tab sync, curved arrow deformability)
+- Backend tests: `db-unit`, `mcp-contract`, `mcp-sanitization`, `security-unit`, `smoke-ws`, `tenant-authz-behavior`
+- Frontend tests: `scene-preparation`, `helpers`, `sync-logic`
 
 ### Changed
 - `computeElementHash` is now order-stable for equivalent element sets
-- `frontend/src/App.tsx` now uses centralized scene-preparation utilities for label expansion and native-vs-converted routing
-- Documentation test counts updated to `443`
+- `frontend/src/App.tsx` uses centralized scene-preparation utilities for label expansion and native-vs-converted routing
+- Rate limits raised: general 100→500 req/15min, write burst 10→30 req/min
+- MCP unknown tool calls now return JSON-RPC `MethodNotFound` (-32601) instead of generic error
+- Test count: 446/446
 
 ### Fixed
-- MCP unknown tool calls now return JSON-RPC `MethodNotFound` (`-32601`)
-- `import_scene` now enforces dangerous-key checks on parsed scene payloads before processing
-- Double WebSocket connection race: guard now also blocks `CONNECTING` state, preventing a second WS from seeding `knownContainerIdsRef` prematurely
-- Title/subtitle auto-injection for WS-delivered container elements: `handleCanvasChange()` now called explicitly after `element_created` updates scene (Excalidraw's `CaptureUpdateAction.NEVER` suppresses the `onChange` callback)
-- Curved arrow control points remain deformable after sync round-trip (merge strategy preserves Excalidraw internals)
-- E2E: `curved arrow stays deformable after sync round-trip` regression test passing
-- `textAlign`, `verticalAlign`, `containerId` added to `ElementSharedFieldsSchema` in `server.ts` — Zod was silently stripping these fields on every REST round-trip, causing bound text to lose centering after sync
-- `ServerElement` type updated with `textAlign?`, `verticalAlign?`, `containerId?` to match schema
-- Subtitle element in MCP `create_element` now sets `textAlign: "center"` and `verticalAlign: "top"`
-- E2E: `new container arrival auto-injects title and subtitle text` now reliably passes with the double-WS fix
+- **Double WebSocket connection race** — second WS created during `CONNECTING` state seeded `knownContainerIdsRef` prematurely, blocking title auto-injection; guard now also blocks `CONNECTING` state
+- **Title/subtitle not injected for WS-delivered containers** — `CaptureUpdateAction.NEVER` suppresses `onChange`; `handleCanvasChange()` now called explicitly after `element_created`
+- **Text alignment lost after sync** — `ElementSharedFieldsSchema` did not declare `textAlign`, `verticalAlign`, `containerId`; Zod silently stripped these on every REST round-trip
+- **Curved arrow deforms after sync** — element replace strategy discarded Excalidraw-internal control point state; now merges incoming over existing
+- **MCP `import_scene` prototype pollution** — `assertNoDangerousKeys()` now called on all parsed JSON payloads (MCP stdio bypasses Express middleware)
+- **FTS5 colon column-filter injection** — `:` added to blocked character set in `sanitizeSearchQuery`
+- **Global state race in `createProject`/`listProjects`** — explicit `tenantId?` param added; MCP callers pass captured ID at call time
+- Subtitle elements in MCP `create_element` now set `textAlign: "center"` and `verticalAlign: "top"`
+- `ServerElement` type updated with `textAlign?`, `verticalAlign?`, `containerId?`
+- `pendingTitleTimerRef` now cleaned up on component unmount (prevented stale closure after unmount)
+- `localStorage` JSON.parse for widget position wrapped in try/catch (malformed value no longer crashes component)
+- Docker `LABEL org.opencontainers.image.source` corrected to fork URL
 
 ## [1.0.1] - 2026-03-29
 
