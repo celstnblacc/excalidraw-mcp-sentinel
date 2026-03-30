@@ -20,7 +20,7 @@ Run a live Excalidraw canvas and control it from any AI agent. This repo provide
 
 Forked from [celstnblacc/excalidraw-mcp-sentinel](https://github.com/celstnblacc/excalidraw-mcp-sentinel) (itself a fork of [yctimlin/mcp_excalidraw](https://github.com/yctimlin/mcp_excalidraw)) with production hardening:
 
-- **369 tests** (upstream has none) — unit, API, WebSocket, and regression
+- **443 tests** (upstream has none) — unit, API, WebSocket, and regression
 - **Security middleware** (`src/security.ts`): helmet, CORS allowlist, timing-safe API key auth, prototype pollution guard, input sanitization
 - **3-tier rate limiting**: general, destructive, and write-burst ceilings
 - **WebSocket challenge-response authentication**
@@ -66,6 +66,7 @@ Click the workspace badge to switch between isolated canvases — each workspace
 - [Troubleshooting](#troubleshooting)
 - [Known Issues / TODO](#known-issues--todo)
 - [Development](#development)
+- [Similar Project Scan](#similar-project-scan)
 - [Credits](#credits)
 
 ## Prerequisites
@@ -688,6 +689,33 @@ npm run build
 # Dev mode (watch)
 npm run dev
 ```
+
+### Similar Project Scan
+
+Use the built-in scanner to look for repositories that are architecturally similar to this project. The scan is capability-based, not fork-based: it looks for Excalidraw plus MCP, backend sync, persistence, security, and self-hosting signals.
+
+Basic run:
+
+```bash
+npm run scan:similar-projects
+```
+
+Broader competitor scan excluding this repo's direct lineage:
+
+```bash
+npm run scan:similar-projects -- \
+  --exclude-repo yctimlin/mcp_excalidraw \
+  --exclude-repo sanjibdevnathlabs/mcp-excalidraw-local \
+  --exclude-repo celstnblacc/excalidraw-mcp-sentinel
+```
+
+Outputs are written to `docs/generated/` as both JSON and Markdown reports. For higher GitHub API limits, set `GITHUB_TOKEN` before running the scan.
+
+> Note: rerun the scan after significant product or architecture changes. The ranking is based on the current shape of this repo, so active work on MCP features, persistence, security, or backend topology can materially change which repos are the closest matches.
+
+See also:
+- [Top repo comparison](docs/COMPARISON-excalidraw-top-repos.md)
+- [Search strategy](docs/GUIDE-excalidraw-similar-project-search.md)
 
 ### Database
 

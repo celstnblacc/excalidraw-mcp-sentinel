@@ -111,6 +111,12 @@ export function sanitizeBody(req: Request, res: Response, next: NextFunction): v
   next();
 }
 
+export function assertNoDangerousKeys(obj: unknown, context = 'input'): void {
+  if (hasDangerousKey(obj)) {
+    throw new Error(`${context} contains disallowed keys (__proto__, constructor, prototype)`);
+  }
+}
+
 // ── Mermaid Input Validation ──────────────────────────────────────────────────
 const MAX_MERMAID_LENGTH = 50 * 1024; // 50 KB
 const MAX_MERMAID_CONFIG_KEYS = 10;
@@ -205,7 +211,7 @@ export function sanitizeSearchQuery(query: string): string {
   if (/\b(?:AND|OR|NOT|NEAR(?:\/\d+)?)\b/i.test(trimmed)) {
     throw new InvalidSearchQueryError();
   }
-  if (/[*(){}^]/.test(trimmed)) {
+  if (/[*(){}^:]/.test(trimmed)) {
     throw new InvalidSearchQueryError();
   }
 

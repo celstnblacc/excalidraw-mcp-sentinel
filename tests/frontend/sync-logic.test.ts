@@ -12,7 +12,7 @@ import {
 // ─── cleanElementForExcalidraw comprehensive ────────────────
 
 describe('cleanElementForExcalidraw - comprehensive', () => {
-  it('strips all server-only metadata fields', () => {
+  it('strips server-only metadata fields but preserves Excalidraw version', () => {
     const serverEl = {
       id: 'el-1',
       type: 'rectangle',
@@ -31,7 +31,8 @@ describe('cleanElementForExcalidraw - comprehensive', () => {
     const cleaned = cleanElementForExcalidraw(serverEl);
     expect(cleaned).not.toHaveProperty('createdAt');
     expect(cleaned).not.toHaveProperty('updatedAt');
-    expect(cleaned).not.toHaveProperty('version');
+    // version is kept — it is the Excalidraw element version, not a DB field
+    expect(cleaned).toHaveProperty('version', 1);
     expect(cleaned).not.toHaveProperty('syncedAt');
     expect(cleaned).not.toHaveProperty('source');
     expect(cleaned).not.toHaveProperty('syncTimestamp');

@@ -5,6 +5,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+### Added
+- `frontend/src/utils/scenePreparation.ts` with scene-preparation utilities (`expandLabelsToNative`, `prepareElementsForScene`, `convertElementsPreservingImageProps`)
+- Backend tests: `tests/backend/db-unit.test.ts`, `tests/backend/mcp-contract.test.ts`, `tests/backend/mcp-sanitization.test.ts`, `tests/backend/security-unit.test.ts`, `tests/backend/smoke-ws.test.ts`, `tests/backend/tenant-authz-behavior.test.ts`
+- Frontend test: `tests/frontend/scene-preparation.test.ts`
+- E2E regression suite: `tests/e2e/phase2-regressions.spec.ts`
+
+### Changed
+- `computeElementHash` is now order-stable for equivalent element sets
+- `frontend/src/App.tsx` now uses centralized scene-preparation utilities for label expansion and native-vs-converted routing
+- Documentation test counts updated to `443`
+
+### Fixed
+- MCP unknown tool calls now return JSON-RPC `MethodNotFound` (`-32601`)
+- `import_scene` now enforces dangerous-key checks on parsed scene payloads before processing
+
 ## [1.0.1] - 2026-03-29
 
 ### Fixed

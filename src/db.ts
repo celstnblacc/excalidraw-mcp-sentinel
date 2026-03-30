@@ -526,17 +526,19 @@ export function listTenants(): Tenant[] {
 
 // ── Projects ──
 
-export function createProject(name: string, description?: string): Project {
+export function createProject(name: string, description?: string, tenantId?: string): Project {
+  const tid = tenantId ?? activeTenantId;
   const id = generateId();
   const now = new Date().toISOString();
   db.prepare(
     'INSERT INTO projects (id, name, description, tenant_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(id, name, description || null, activeTenantId, now, now);
-  return { id, name, description: description || null, tenant_id: activeTenantId, created_at: now, updated_at: now };
+  ).run(id, name, description || null, tid, now, now);
+  return { id, name, description: description || null, tenant_id: tid, created_at: now, updated_at: now };
 }
 
-export function listProjects(): Project[] {
-  return db.prepare('SELECT * FROM projects WHERE tenant_id = ? ORDER BY updated_at DESC').all(activeTenantId) as Project[];
+export function listProjects(tenantId?: string): Project[] {
+  const tid = tenantId ?? activeTenantId;
+  return db.prepare('SELECT * FROM projects WHERE tenant_id = ? ORDER BY updated_at DESC').all(tid) as Project[];
 }
 
 export function getProjectForTenant(projectId: string, tenantId: string): Project | undefined {

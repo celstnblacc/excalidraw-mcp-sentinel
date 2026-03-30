@@ -13,7 +13,9 @@ import {
   CallToolRequestSchema, 
   ListToolsRequestSchema,
   CallToolRequest,
-  Tool
+  Tool,
+  McpError,
+  ErrorCode
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import dotenv from 'dotenv';
@@ -41,8 +43,10 @@ import {
   getElementHistory as dbGetElementHistory, getProjectHistory as dbGetProjectHistory,
   ensureTenant as dbEnsureTenant, setActiveTenant as dbSetActiveTenant,
   getActiveTenant as dbGetActiveTenant, getActiveTenantId as dbGetActiveTenantId,
+  getActiveProjectId as dbGetActiveProjectId,
   listTenants as dbListTenants
 } from './db.js';
+import { assertNoDangerousKeys } from './security.js';
 
 // Load environment variables
 dotenv.config();
@@ -1890,8 +1894,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           const safeImportPath = sanitizeFilePath(params.filePath);
           const fileContent = fs.readFileSync(safeImportPath, 'utf-8');
           sceneData = JSON.parse(fileContent);
+          assertNoDangerousKeys(sceneData, 'import_scene filePath');
         } else if (params.data) {
           sceneData = JSON.parse(params.data);
+          assertNoDangerousKeys(sceneData, 'import_scene data');
         } else {
           throw new Error('Either filePath or data must be provided');
         }
@@ -2708,7 +2714,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         const params = z.object({ query: z.string() }).parse(args);
         logger.info('Searching elements via MCP', { query: params.query });
 
-        const results = dbSearchElements(params.query);
+        const results = dbSearchElements(params.query, dbGetActiveProjectId());
         return {
           content: [{
             type: 'text',
@@ -2721,7 +2727,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
 
       case 'list_projects': {
         logger.info('Listing projects via MCP');
-        const projects = dbListProjects();
+        const projects = dbListProjects(dbGetActiveTenantId());
         const active = dbGetActiveProject();
         return {
           content: [{
@@ -2739,7 +2745,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         }).parse(args || {});
 
         if (params.createName) {
-          const newProject = dbCreateProject(params.createName, params.createDescription);
+          const newProject = dbCreateProject(params.createName, params.createDescription, dbGetActiveTenantId());
           dbSetActiveProject(newProject.id);
           logger.info('Created and switched to new project', { project: newProject });
           return {
@@ -2834,9 +2840,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
       }
 
       default:
-        throw new Error(`Unknown tool: ${name}`);
+        throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
   } catch (error) {
+    if (error instanceof McpError) {
+      throw error;
+    }
     logger.error(`Error handling tool call: ${(error as Error).message}`, { error });
     return {
       content: [{ type: 'text', text: `Error: ${(error as Error).message}` }],
@@ -3022,3 +3031,4 @@ if (isMainModule()) {
 }
 
 export default runServer;
+export { server, tools };
