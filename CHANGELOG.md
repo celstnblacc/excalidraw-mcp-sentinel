@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-03-30
+
+### Fixed
+- Global install crash (`Schema method literal must be a string`) — upgraded `zod` from `3.25.5` to `^4.3.6` so the package uses real zod v4 rather than falling back to zod 3.x's v4 compatibility shim, which lacks the `.value` getter required by `@modelcontextprotocol/sdk@1.26.0`
+- `z.record(z.any())` call updated to `z.record(z.string(), z.any())` to satisfy zod v4's stricter record key-type requirement
+
 ## [1.0.2] - 2026-03-30
 
 ### Added

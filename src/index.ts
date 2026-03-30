@@ -378,7 +378,7 @@ const DistributeElementsSchema = z.object({
 
 const QuerySchema = z.object({
   type: z.enum(Object.values(EXCALIDRAW_ELEMENT_TYPES) as [ExcalidrawElementType, ...ExcalidrawElementType[]]).optional(),
-  filter: z.record(z.any()).optional()
+  filter: z.record(z.string(), z.any()).optional()
 });
 
 const ResourceSchema = z.object({
