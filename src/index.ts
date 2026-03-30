@@ -1159,6 +1159,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
             text: effectiveSubtitle,
             fontSize: resolvedSubtitleSize,
             fontFamily: resolvedSubtitleFont,
+            textAlign: 'center',
+            verticalAlign: 'top',
             strokeColor: elementProps.strokeColor ?? '#1e1e1e',
             opacity: elementProps.opacity ?? 100,
             roughness: elementProps.roughness ?? USER_PREFS.roughness,

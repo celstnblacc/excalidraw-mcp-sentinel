@@ -23,6 +23,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - Title/subtitle auto-injection for WS-delivered container elements: `handleCanvasChange()` now called explicitly after `element_created` updates scene (Excalidraw's `CaptureUpdateAction.NEVER` suppresses the `onChange` callback)
 - Curved arrow control points remain deformable after sync round-trip (merge strategy preserves Excalidraw internals)
 - E2E: `curved arrow stays deformable after sync round-trip` regression test passing
+- `textAlign`, `verticalAlign`, `containerId` added to `ElementSharedFieldsSchema` in `server.ts` — Zod was silently stripping these fields on every REST round-trip, causing bound text to lose centering after sync
+- `ServerElement` type updated with `textAlign?`, `verticalAlign?`, `containerId?` to match schema
+- Subtitle element in MCP `create_element` now sets `textAlign: "center"` and `verticalAlign: "top"`
 - E2E: `new container arrival auto-injects title and subtitle text` now reliably passes with the double-WS fix
 
 ## [1.0.1] - 2026-03-29
