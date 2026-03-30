@@ -14,13 +14,13 @@ Run a live Excalidraw canvas and control it from any AI agent. This repo provide
 - **SQLite Persistence**: Elements survive restarts, with versioning and search
 - **Multi-Tenancy**: Isolated canvases per workspace, auto-detected
 - **Security Hardened**: Helmet, rate limiting, API key auth, prototype pollution guard, WS challenge-response
-- **369 Tests**: Full test coverage across unit, API, WebSocket, and regression tests
+- **446 Tests**: Full test coverage across unit, API, WebSocket, and regression tests
 
 ## Why this fork?
 
 Forked from [celstnblacc/excalidraw-mcp-sentinel](https://github.com/celstnblacc/excalidraw-mcp-sentinel) (itself a fork of [yctimlin/mcp_excalidraw](https://github.com/yctimlin/mcp_excalidraw)) with production hardening:
 
-- **443 tests** (upstream has none) — unit, API, WebSocket, and regression
+- **446 tests** (upstream has none) — unit, API, WebSocket, and regression
 - **Security middleware** (`src/security.ts`): helmet, CORS allowlist, timing-safe API key auth, prototype pollution guard, input sanitization
 - **3-tier rate limiting**: general, destructive, and write-burst ceilings
 - **WebSocket challenge-response authentication**

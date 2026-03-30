@@ -1151,7 +1151,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
 
           const subtitleElement: ServerElement = {
             id: subtitleId,
-            type: 'text' as any,
+            type: 'text',
             x: element.x + 10,
             y: element.y + (containerHeight * 0.45),
             width: containerWidth - 20,

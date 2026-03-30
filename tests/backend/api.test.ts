@@ -587,3 +587,69 @@ describe('canvasStatus in mutation responses', () => {
     expect(res.body.canvasStatus).toHaveProperty('scope');
   });
 });
+
+// Regression: textAlign/verticalAlign/containerId must survive REST round-trip
+// These fields were silently stripped by Zod before the fix (ElementSharedFieldsSchema
+// did not declare them, so .parse() dropped them).
+describe('Text alignment fields — REST round-trip regression', () => {
+  it('POST /api/elements preserves textAlign and verticalAlign', async () => {
+    const res = await request(app)
+      .post('/api/elements')
+      .send({
+        type: 'text',
+        x: 10, y: 20, width: 100, height: 30,
+        text: 'Hello',
+        textAlign: 'center',
+        verticalAlign: 'middle',
+      });
+
+    expect(res.status).toBe(200);
+    const el = res.body.element;
+    expect(el.textAlign).toBe('center');
+    expect(el.verticalAlign).toBe('middle');
+  });
+
+  it('POST /api/elements preserves containerId on bound text', async () => {
+    // Create container first
+    const containerRes = await request(app)
+      .post('/api/elements')
+      .send({ type: 'rectangle', x: 0, y: 0, width: 200, height: 100 });
+    expect(containerRes.status).toBe(200);
+    const containerId = containerRes.body.element?.id;
+    expect(containerId).toBeTruthy();
+
+    // Create bound text referencing the container
+    const textRes = await request(app)
+      .post('/api/elements')
+      .send({
+        type: 'text',
+        x: 10, y: 10, width: 180, height: 20,
+        text: 'Title',
+        textAlign: 'center',
+        verticalAlign: 'top',
+        containerId,
+      });
+
+    expect(textRes.status).toBe(200);
+    const textEl = textRes.body.element;
+    expect(textEl.containerId).toBe(containerId);
+    expect(textEl.textAlign).toBe('center');
+    expect(textEl.verticalAlign).toBe('top');
+  });
+
+  it('PUT /api/elements/:id preserves textAlign on update', async () => {
+    const createRes = await request(app)
+      .post('/api/elements')
+      .send({ type: 'text', x: 0, y: 0, width: 100, height: 30, text: 'Hi', textAlign: 'left' });
+    expect(createRes.status).toBe(200);
+    const id = createRes.body.element?.id;
+    expect(id).toBeTruthy();
+
+    const updateRes = await request(app)
+      .put(`/api/elements/${id}`)
+      .send({ id, type: 'text', x: 0, y: 0, textAlign: 'center' });
+
+    expect(updateRes.status).toBe(200);
+    expect(updateRes.body.element?.textAlign).toBe('center');
+  });
+});

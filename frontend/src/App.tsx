@@ -88,13 +88,26 @@ function App(): JSX.Element {
   const knownContainerIdsRef = useRef<Set<string>>(new Set())
   const CONTAINER_TYPES = new Set(['rectangle', 'ellipse', 'diamond'])
 
+  // Seed knownContainerIdsRef before updateScene to prevent re-injection on load/sync
+  const seedKnownContainers = (elements: readonly { type: string; id: string }[]): void => {
+    for (const el of elements) {
+      if (CONTAINER_TYPES.has(el.type)) {
+        knownContainerIdsRef.current.add(el.id)
+      }
+    }
+  }
+
   // Custom font size input state
   const [customFontSize, setCustomFontSize] = useState<string>('')
 
   // Draggable widget state — default near top menu
   const [widgetPos, setWidgetPos] = useState<{x: number, y: number}>(() => {
-    const saved = localStorage.getItem('font-widget-pos')
-    return saved ? JSON.parse(saved) : { x: window.innerWidth * 0.55, y: 90 }
+    try {
+      const saved = localStorage.getItem('font-widget-pos')
+      return saved ? JSON.parse(saved) : { x: window.innerWidth * 0.55, y: 90 }
+    } catch {
+      return { x: window.innerWidth * 0.55, y: 90 }
+    }
   })
   const [isDragging, setIsDragging] = useState(false)
   const dragOffset = useRef<{x: number, y: number}>({x: 0, y: 0})
@@ -162,10 +175,11 @@ function App(): JSX.Element {
     })
   }
 
-  // Clean up debounce timer on unmount
+  // Clean up timers on unmount
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+      if (pendingTitleTimerRef.current) clearTimeout(pendingTitleTimerRef.current)
     }
   }, [])
 
@@ -310,11 +324,7 @@ function App(): JSX.Element {
         const finalElements = prepareElementsForScene(result.elements, convertToExcalidrawElements as any)
 
         // Seed known containers BEFORE updateScene so onChange doesn't re-inject titles
-        for (const el of finalElements) {
-          if (CONTAINER_TYPES.has(el.type)) {
-            knownContainerIdsRef.current.add(el.id)
-          }
-        }
+        seedKnownContainers(finalElements)
 
         excalidrawAPI?.updateScene({ elements: finalElements })
 
@@ -543,11 +553,7 @@ function App(): JSX.Element {
         if (Array.isArray(data.elements) && data.elements.length > 0) {
           const finalElements = prepareElementsForScene(data.elements, convertToExcalidrawElements as any)
           // Seed known containers before updateScene
-          for (const el of finalElements) {
-            if (CONTAINER_TYPES.has(el.type)) {
-              knownContainerIdsRef.current.add(el.id)
-            }
-          }
+          seedKnownContainers(finalElements)
           api.updateScene({
             elements: finalElements,
             captureUpdate: CaptureUpdateAction.NEVER
@@ -593,11 +599,7 @@ function App(): JSX.Element {
         case 'initial_elements':
           if (data.elements && data.elements.length > 0) {
             const initFinalElements = prepareElementsForScene(data.elements, convertToExcalidrawElements as any)
-            for (const el of initFinalElements) {
-              if (CONTAINER_TYPES.has(el.type)) {
-                knownContainerIdsRef.current.add(el.id)
-              }
-            }
+            seedKnownContainers(initFinalElements)
             api.updateScene({
               elements: initFinalElements,
               captureUpdate: CaptureUpdateAction.NEVER
@@ -1118,11 +1120,7 @@ function App(): JSX.Element {
       const result: ApiResponse = await elemRes.json()
       if (result.success && result.elements && result.elements.length > 0) {
         const switchedElements = prepareElementsForScene(result.elements, convertToExcalidrawElements as any)
-        for (const el of switchedElements) {
-          if (CONTAINER_TYPES.has(el.type)) {
-            knownContainerIdsRef.current.add(el.id)
-          }
-        }
+        seedKnownContainers(switchedElements)
         excalidrawAPI?.updateScene({ elements: switchedElements })
       }
 
