@@ -17,7 +17,7 @@
     "dev": "concurrently \"npm run dev:server\" \"vite\"",
     "dev:server": "npx tsc --watch",
     "production": "npm run build && npm run canvas",
-    "postinstall": "npm rebuild better-sqlite3 --update-binary 2>/dev/null || true",
+    "postinstall": "node -e \"const {execSync}=require('child_process');try{execSync('npm rebuild better-sqlite3 --update-binary',{stdio:'ignore'})}catch(e){}\"",
     "prepublishOnly": "npm run build",
     "setup": "node dist/index.js setup",
     "update": "node dist/index.js update",
