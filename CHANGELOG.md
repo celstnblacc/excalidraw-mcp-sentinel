@@ -102,3 +102,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Fixed
 - Labels stored as label.text (e.g. from MCP updates) now survive page refresh — expandLabelsToNative pre-converts them to bound text before Excalidraw renders
+
+## [1.0.4] - 2026-03-31
+
+### Fixed
+- `npm install -g excalidraw-mcp-sentinel` crashed on Windows — `postinstall` script used Unix-only `2>/dev/null || true` syntax which cmd.exe does not support; replaced with a cross-platform `node -e` inline script
