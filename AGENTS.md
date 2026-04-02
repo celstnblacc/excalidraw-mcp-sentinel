@@ -92,6 +92,27 @@ All middleware lives here — do not duplicate in routes:
 - Tests mutate `process.env` between cases — do not cache env values at module init.
 - Integration tests use real SQLite (tmpdir). Do not mock the DB.
 
+## Similar Project Scan
+
+- Use `npm run scan:similar-projects` to scan GitHub for architecturally similar Excalidraw projects.
+- The scanner is capability-based, not fork-based: it looks for Excalidraw plus MCP, backend sync, persistence, security, workspace isolation, and self-hosting signals.
+- When looking for broader competitors instead of this repo's own lineage, run:
+
+```bash
+npm run scan:similar-projects -- \
+  --exclude-repo yctimlin/mcp_excalidraw \
+  --exclude-repo sanjibdevnathlabs/mcp-excalidraw-local \
+  --exclude-repo celstnblacc/excalidraw-mcp-sentinel
+```
+
+- Reports are written to `docs/generated/` as JSON and Markdown.
+- For repeated or larger scans, prefer setting `GITHUB_TOKEN` to avoid GitHub anonymous API rate limits.
+- Rerun the scan after significant product or architecture changes. Changes to MCP features, persistence, security, or backend topology can materially change which repos are the closest matches.
+- Reference docs:
+  - `docs/GUIDE-excalidraw-similar-project-search.md`
+  - `docs/AUDIT-excalidraw-similar-project-scan.md`
+  - `docs/COMPARISON-excalidraw-top-repos.md`
+
 ## Protected Files
 
 - `AGENTS.md` — immutable unless explicitly named in the request.

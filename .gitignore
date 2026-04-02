@@ -33,4 +33,5 @@ playwright-report/
 coverage/
 
 docs/*
-!docs/screenshots/
+!docs/screenshots/.serena/
+.DS_Store
