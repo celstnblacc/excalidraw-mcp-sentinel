@@ -35,3 +35,4 @@ coverage/
 docs/*
 !docs/screenshots/.serena/
 .DS_Store
+.serena/
