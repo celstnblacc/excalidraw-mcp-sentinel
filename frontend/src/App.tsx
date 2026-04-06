@@ -133,6 +133,7 @@ function App(): JSX.Element {
   const [isCreatingProject, setIsCreatingProject] = useState<boolean>(false)
   const newProjectInputRef = useRef<HTMLInputElement | null>(null)
   const [confirmDeleteProjectId, setConfirmDeleteProjectId] = useState<string | null>(null)
+  const [confirmDeleteTenantId, setConfirmDeleteTenantId] = useState<string | null>(null)
 
   // Keep refs in sync so closures (WebSocket handlers) always see latest values
   useEffect(() => {
@@ -1241,6 +1242,16 @@ function App(): JSX.Element {
       if (data.success) {
         setActiveProject({ id: data.project.id, name: data.project.name })
         setProjectMenuOpen(false)
+        // Clear canvas and load the new project's elements directly
+        // (don't rely on WS roundtrip which can race)
+        const api = excalidrawAPIRef.current
+        if (api) {
+          api.updateScene({ elements: [], captureUpdate: CaptureUpdateAction.NEVER })
+          lastSyncedHashRef.current = ''
+          lastSeenHashRef.current = ''
+          lastSyncedElementsRef.current = new Map()
+        }
+        await loadExistingElements()
         showToast(`Switched to "${data.project.name}"`)
       }
     } catch (err) {
@@ -1290,6 +1301,27 @@ function App(): JSX.Element {
     } catch (err) {
       console.error('Failed to delete project:', err)
       setConfirmDeleteProjectId(null)
+    }
+  }
+
+  const deleteTenantUI = async (tenantId: string) => {
+    try {
+      const res = await fetch(`/api/tenants/${tenantId}`, {
+        method: 'DELETE',
+        headers: tenantHeaders()
+      })
+      const data = await res.json()
+      if (data.success) {
+        setConfirmDeleteTenantId(null)
+        setTenantList(prev => prev.filter(t => t.id !== tenantId))
+        showToast('Workspace deleted')
+      } else {
+        showToast(data.error ?? 'Delete failed', 4000)
+        setConfirmDeleteTenantId(null)
+      }
+    } catch (err) {
+      console.error('Failed to delete tenant:', err)
+      setConfirmDeleteTenantId(null)
     }
   }
 
@@ -1553,19 +1585,37 @@ function App(): JSX.Element {
               </div>
               <div className="menu-list">
                 {filtered.map(t => (
-                  <button
-                    key={t.id}
-                    className={`menu-item ${activeTenant?.id === t.id ? 'menu-item-active' : ''}`}
-                    onClick={() => switchTenant(t.id)}
-                  >
-                    <span className="menu-item-name">{t.name}</span>
-                    <span className="menu-item-path" title={t.workspace_path}>
-                      {t.workspace_path.length > 40
-                        ? '...' + t.workspace_path.slice(-37)
-                        : t.workspace_path}
-                    </span>
-                    {activeTenant?.id === t.id && <span className="menu-item-check">✓</span>}
-                  </button>
+                  <div key={t.id} className="tenant-row">
+                    {confirmDeleteTenantId === t.id ? (
+                      <div className="project-delete-confirm">
+                        <span className="project-delete-msg">Delete "{t.name}"?</span>
+                        <button className="project-delete-yes" onClick={() => deleteTenantUI(t.id)}>Delete</button>
+                        <button className="project-delete-no" onClick={() => setConfirmDeleteTenantId(null)}>Cancel</button>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          className={`menu-item ${activeTenant?.id === t.id ? 'menu-item-active' : ''}`}
+                          onClick={() => switchTenant(t.id)}
+                        >
+                          <span className="menu-item-name">{t.name}</span>
+                          <span className="menu-item-path" title={t.workspace_path}>
+                            {t.workspace_path.length > 40
+                              ? '...' + t.workspace_path.slice(-37)
+                              : t.workspace_path}
+                          </span>
+                          {activeTenant?.id === t.id && <span className="menu-item-check">✓</span>}
+                        </button>
+                        {activeTenant?.id !== t.id && (
+                          <button
+                            className="project-delete-btn"
+                            title="Delete workspace"
+                            onClick={e => { e.stopPropagation(); setConfirmDeleteTenantId(t.id) }}
+                          >×</button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 ))}
                 {filtered.length === 0 && <div className="menu-empty">No matching workspaces</div>}
               </div>

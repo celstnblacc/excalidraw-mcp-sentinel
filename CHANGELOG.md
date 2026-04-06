@@ -5,6 +5,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-04-06
+
+### Added
+- `DELETE /api/tenants/:id` endpoint — delete workspaces (tenants) with cascade (projects, elements, snapshots)
+- Workspace delete UI: inline confirm buttons in the workspace switcher panel
+
+### Fixed
+- Project switch in browser did not load new project's elements — `switchProjectUI` now directly clears canvas and calls `loadExistingElements()` instead of relying on WS roundtrip
+
 ## [1.0.5] - 2026-04-06
 
 ### Added

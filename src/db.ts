@@ -524,6 +524,26 @@ export function listTenants(): Tenant[] {
   return db.prepare('SELECT * FROM tenants ORDER BY last_accessed_at DESC').all() as Tenant[];
 }
 
+export function deleteTenant(id: string): void {
+  if (id === activeTenantId) throw new Error('Cannot delete the active tenant — switch to another tenant first');
+  const tenants = listTenants();
+  if (tenants.length <= 1) throw new Error('Cannot delete the last tenant');
+  const tenant = getTenantById(id);
+  if (!tenant) throw new Error(`Tenant "${id}" not found`);
+  // CASCADE: delete elements + element_versions for all projects in this tenant, then projects, then tenant
+  const projects = db.prepare('SELECT id FROM projects WHERE tenant_id = ?').all(id) as { id: string }[];
+  const deleteElements = db.prepare('DELETE FROM elements WHERE project_id = ?');
+  const deleteVersions = db.prepare('DELETE FROM element_versions WHERE element_id IN (SELECT id FROM elements WHERE project_id = ?)');
+  const deleteSnapshots = db.prepare('DELETE FROM snapshots WHERE project_id = ?');
+  for (const p of projects) {
+    deleteVersions.run(p.id);
+    deleteElements.run(p.id);
+    deleteSnapshots.run(p.id);
+  }
+  db.prepare('DELETE FROM projects WHERE tenant_id = ?').run(id);
+  db.prepare('DELETE FROM tenants WHERE id = ?').run(id);
+}
+
 // ── Projects ──
 
 export function createProject(name: string, description?: string, tenantId?: string): Project {

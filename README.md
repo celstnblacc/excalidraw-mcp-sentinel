@@ -758,6 +758,7 @@ The canvas server exposes a REST API alongside the WebSocket interface:
 | PUT | `/api/project/active` | Switch the active project |
 | DELETE | `/api/projects/:id` | Delete a project (cascades elements) |
 | GET | `/api/tenants` | List all tenants |
+| DELETE | `/api/tenants/:id` | Delete a tenant (cascades projects and elements) |
 | GET | `/api/tenant/active` | Get the active tenant |
 | PUT | `/api/tenant/active` | Set the active tenant |
 | GET | `/api/settings/:key` | Read a setting |

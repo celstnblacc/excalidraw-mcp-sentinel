@@ -28,7 +28,7 @@ import {
   BroadcastResult
 } from './types.js';
 import * as store from './db.js';
-import { initDb, listTenants as dbListTenants, getActiveTenant as dbGetActiveTenant, getTenantById, setActiveTenant as dbSetActiveTenant, getDefaultProjectForTenant, getProjectForTenant, getCurrentSyncVersion, getChangesSince, setActiveProject as dbSetActiveProject, getActiveProject as dbGetActiveProject, getActiveProjectId as dbGetActiveProjectId, getActiveTenantId as dbGetActiveTenantId, listProjects as dbListProjects, createProject as dbCreateProject, deleteProject as dbDeleteProject, getElementCountForProject as dbGetElementCountForProject } from './db.js';
+import { initDb, listTenants as dbListTenants, getActiveTenant as dbGetActiveTenant, getTenantById, setActiveTenant as dbSetActiveTenant, getDefaultProjectForTenant, getProjectForTenant, getCurrentSyncVersion, getChangesSince, setActiveProject as dbSetActiveProject, getActiveProject as dbGetActiveProject, getActiveProjectId as dbGetActiveProjectId, getActiveTenantId as dbGetActiveTenantId, listProjects as dbListProjects, createProject as dbCreateProject, deleteProject as dbDeleteProject, deleteTenant as dbDeleteTenant, getElementCountForProject as dbGetElementCountForProject } from './db.js';
 import { z } from 'zod';
 import WebSocket from 'ws';
 
@@ -1586,6 +1586,18 @@ app.put('/api/tenant/active', (req: Request, res: Response) => {
     res.json({ success: true, tenant });
   } catch (error) {
     logger.error('Error switching tenant:', error);
+    res.status(400).json({ success: false, error: (error as Error).message });
+  }
+});
+
+app.delete('/api/tenants/:id', (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    dbDeleteTenant(id);
+    broadcast({ type: 'tenant_deleted', tenantId: id } as any);
+    res.json({ success: true, tenantId: id });
+  } catch (error) {
+    logger.error('Error deleting tenant:', error);
     res.status(400).json({ success: false, error: (error as Error).message });
   }
 });
