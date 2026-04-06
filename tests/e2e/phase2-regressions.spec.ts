@@ -46,7 +46,6 @@ test.describe('Phase 2 regressions', () => {
       y: number;
       width: number;
       height: number;
-      label?: { text?: string };
     };
 
     await page.reload();
@@ -60,14 +59,18 @@ test.describe('Phase 2 regressions', () => {
       y: number;
       width: number;
       height: number;
-      label?: { text?: string };
     };
 
     expect(afterReload.x).toBe(initial.x);
     expect(afterReload.y).toBe(initial.y);
     expect(afterReload.width).toBe(initial.width);
     expect(afterReload.height).toBe(initial.height);
-    expect(afterReload.label?.text).toBe('Stable Label');
+    // label is materialized into a native bound text element on create;
+    // verify the bound text element persists with correct text after reload
+    const btRes = await request.get(`${API}/api/elements/pos-stable-1-label`);
+    expect(btRes.ok()).toBe(true);
+    const bt = (await btRes.json()).element as { text: string };
+    expect(bt.text).toBe('Stable Label');
   });
 
   test('new container arrival auto-injects title and subtitle text', async ({ page, request }) => {

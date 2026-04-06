@@ -510,7 +510,9 @@ test.describe('Search E2E', () => {
     const res = await request.get(`${API}/api/elements/search?q=Authentication`);
     const body = await res.json();
     expect(body.elements.length).toBeGreaterThanOrEqual(1);
-    expect(body.elements.some((e: any) => e.id === 'fts-el')).toBe(true);
+    // label is materialized into a native bound text element (id: 'fts-el-label')
+    // so FTS matches the bound text element; the container id or bound text id are both valid
+    expect(body.elements.some((e: any) => e.id === 'fts-el' || e.id === 'fts-el-label')).toBe(true);
   });
 });
 
