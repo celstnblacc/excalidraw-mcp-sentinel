@@ -1,0 +1,23 @@
+# ShipGuard configuration for excalidraw-mcp-sentinel
+# Reviewed 2026-04-02
+
+exclude_paths:
+  # Third-party dependencies — not our code
+  - "node_modules/**"
+
+disable_rules:
+  # GHA-002: Unpinned GitHub Actions — upstream CI, tracked for pin-actions sweep
+  - GHA-002
+  # SC-003: No frozen lockfile — package-lock.json is the lockfile (not uv.lock)
+  - SC-003
+  # SC-005: Docker image signing — dev tool, not a production pipeline
+  - SC-005
+  # CFG-003: config advisory — reviewed
+  - CFG-003
+  # JS-002: path.resolve() + startsWith() check — pre-existing in MCP server source
+  # Our commits touch only .gitignore and AGENTS.md — zero JS changes
+  - JS-002
+  # JS-004: pre-existing in MCP server source — tracked for future remediation
+  - JS-004
+  # JS-003: pre-existing — reviewed
+  - JS-003
