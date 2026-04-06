@@ -27,6 +27,7 @@ export interface ExcalidrawElementBase {
   customData?: Record<string, any> | null;
   boundElements?: readonly ExcalidrawBoundElement[] | null;
   updated?: number;
+  index?: string;
   containerId?: string | null;
 }
 

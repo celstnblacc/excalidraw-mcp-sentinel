@@ -497,7 +497,7 @@ Each workspace (codebase) gets an isolated canvas. The tenant is identified by a
 
 1. **Auto-detection**: When the MCP starts, it calls `server.listRoots()` to get the actual workspace path from the MCP client. This is hashed to create a unique tenant ID.
 2. **Per-request scoping**: Every HTTP request includes an `X-Tenant-Id` header. The canvas server uses this to scope all CRUD operations to the correct tenant.
-3. **UI switcher**: The canvas UI shows a "Workspace: &lt;name&gt;" badge. Click it to open a dropdown with all known workspaces, complete with search.
+3. **UI switcher**: The canvas UI shows a "Workspace: &lt;name&gt;" badge. Click it to open a dropdown with all known workspaces, complete with search and bulk management. Use **Select** to enter multi-select mode, check individual workspaces, then **Delete N workspaces** to batch-remove them (with confirmation). **Select All** / **Unselect All** shortcuts are available in selection mode.
 4. **Multi-instance safe**: SQLite WAL mode with `busy_timeout = 5000ms` handles concurrent access from multiple client instances.
 
 ### Projects within a tenant
@@ -759,6 +759,7 @@ The canvas server exposes a REST API alongside the WebSocket interface:
 | DELETE | `/api/projects/:id` | Delete a project (cascades elements) |
 | GET | `/api/tenants` | List all tenants |
 | DELETE | `/api/tenants/:id` | Delete a tenant (cascades projects and elements) |
+| POST | `/api/tenants/batch-delete` | Delete multiple tenants in one request — body: `{ ids: string[] }` (max 50) |
 | GET | `/api/tenant/active` | Get the active tenant |
 | PUT | `/api/tenant/active` | Set the active tenant |
 | GET | `/api/settings/:key` | Read a setting |
