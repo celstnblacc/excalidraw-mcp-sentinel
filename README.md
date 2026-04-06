@@ -753,6 +753,10 @@ The canvas server exposes a REST API alongside the WebSocket interface:
 | POST | `/api/snapshots` | Save a named snapshot |
 | GET | `/api/snapshots` | List snapshots |
 | GET | `/api/snapshots/:name` | Get snapshot by name |
+| GET | `/api/projects` | List projects for the active tenant |
+| POST | `/api/projects` | Create a new project |
+| PUT | `/api/project/active` | Switch the active project |
+| DELETE | `/api/projects/:id` | Delete a project (cascades elements) |
 | GET | `/api/tenants` | List all tenants |
 | GET | `/api/tenant/active` | Get the active tenant |
 | PUT | `/api/tenant/active` | Set the active tenant |

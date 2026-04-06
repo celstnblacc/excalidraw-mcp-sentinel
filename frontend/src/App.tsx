@@ -74,7 +74,12 @@ function App(): JSX.Element {
   })
   const isSyncingRef = useRef<boolean>(false)
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastChangeTimeRef = useRef<number>(0)
+  const [syncCountdown, setSyncCountdown] = useState<number | null>(null)
   const lastSyncedHashRef = useRef<string>('')
+  const lastSeenHashRef = useRef<string>('')
   const lastSyncVersionRef = useRef<number>(
     parseInt(localStorage.getItem('excalidraw-last-sync-version') ?? '0', 10)
   )
@@ -119,6 +124,15 @@ function App(): JSX.Element {
   const [menuOpen, setMenuOpen] = useState<boolean>(false)
   const [tenantSearch, setTenantSearch] = useState<string>('')
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Project state
+  const [activeProject, setActiveProject] = useState<{ id: string; name: string } | null>(null)
+  const [projectList, setProjectList] = useState<{ id: string; name: string; description: string | null }[]>([])
+  const [projectMenuOpen, setProjectMenuOpen] = useState<boolean>(false)
+  const [newProjectName, setNewProjectName] = useState<string>('')
+  const [isCreatingProject, setIsCreatingProject] = useState<boolean>(false)
+  const newProjectInputRef = useRef<HTMLInputElement | null>(null)
+  const [confirmDeleteProjectId, setConfirmDeleteProjectId] = useState<string | null>(null)
 
   // Keep refs in sync so closures (WebSocket handlers) always see latest values
   useEffect(() => {
@@ -179,9 +193,40 @@ function App(): JSX.Element {
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
       if (pendingTitleTimerRef.current) clearTimeout(pendingTitleTimerRef.current)
     }
   }, [])
+
+  // Called on every change. Waits for 400ms of idle before showing the countdown,
+  // so the number only ticks when the user has stopped drawing.
+  const scheduleCountdown = () => {
+    lastChangeTimeRef.current = Date.now()
+    // Reset any pending idle detection
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
+    // Hide countdown while actively drawing
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current)
+      countdownTimerRef.current = null
+      setSyncCountdown(null)
+    }
+    // Start showing countdown only after 400ms of no changes
+    idleTimerRef.current = setTimeout(() => {
+      const deadline = lastChangeTimeRef.current + DEBOUNCE_MS
+      setSyncCountdown(Math.ceil((deadline - Date.now()) / 1000))
+      countdownTimerRef.current = setInterval(() => {
+        const remaining = Math.ceil((lastChangeTimeRef.current + DEBOUNCE_MS - Date.now()) / 1000)
+        if (remaining <= 0) {
+          clearInterval(countdownTimerRef.current!)
+          countdownTimerRef.current = null
+          setSyncCountdown(null)
+        } else {
+          setSyncCountdown(remaining)
+        }
+      }, 200)
+    }, 400)
+  }
 
   // Apply custom font size to selected elements
   const applyCustomFontSize = (size: number): void => {
@@ -206,6 +251,12 @@ function App(): JSX.Element {
   // Trailing debounce: resets on every change, fires after user is idle.
   // Only active when auto-save is on.
   const handleCanvasChange = (): void => {
+    // Check if elements actually changed — onChange fires for selection/appState too
+    const currentElements = excalidrawAPIRef.current?.getSceneElements()
+    const currentHash = currentElements ? computeElementHash(currentElements) : ''
+    const elementsChanged = currentHash !== lastSeenHashRef.current
+    if (elementsChanged) lastSeenHashRef.current = currentHash
+
     // Auto-inject title into new containers (rectangle, ellipse, diamond)
     // Deferred: collect candidates, inject after onChange completes
     if (pendingTitleTimerRef.current) clearTimeout(pendingTitleTimerRef.current)
@@ -294,9 +345,10 @@ function App(): JSX.Element {
       }
     }, 300) // 300ms delay — fires after drawing finishes
 
-    if (!autoSave) return
+    if (!autoSave || !elementsChanged) return
 
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    scheduleCountdown()
 
     debounceTimerRef.current = setTimeout(() => {
       if (!excalidrawAPI || isSyncingRef.current) return
@@ -515,6 +567,20 @@ function App(): JSX.Element {
         }
         return
 
+      case 'project_switched': {
+        console.log('Project switched:', data.projectId, data.projectName)
+        const api = excalidrawAPIRef.current
+        if (!api) return
+        api.updateScene({
+          elements: [],
+          captureUpdate: CaptureUpdateAction.NEVER
+        })
+        lastSyncedHashRef.current = ''
+        lastSyncedElementsRef.current = new Map()
+        loadExistingElements()
+        return
+      }
+
       case 'tenant_switched': {
         console.log('Tenant switched:', data.tenant)
         if (!data.tenant) return
@@ -546,6 +612,8 @@ function App(): JSX.Element {
         } else if (typeof data.tenantId === 'string') {
           activeTenantIdRef.current = data.tenantId
         }
+        // Seed active project from hello_ack
+        fetchProjects()
 
         const api = excalidrawAPIRef.current
         if (!api) return
@@ -1130,11 +1198,109 @@ function App(): JSX.Element {
     }
   }
 
+  const fetchProjects = async () => {
+    try {
+      const res = await fetch('/api/projects', { headers: tenantHeaders() })
+      const data = await res.json()
+      if (data.success) {
+        setProjectList(data.projects)
+        const active = data.projects.find((p: any) => p.id === data.activeProjectId)
+        if (active) setActiveProject({ id: active.id, name: active.name })
+      }
+    } catch (err) {
+      console.error('Failed to fetch projects:', err)
+    }
+  }
+
+  const switchProjectUI = async (projectId: string) => {
+    if (projectId === activeProject?.id) {
+      setProjectMenuOpen(false)
+      return
+    }
+    // Cancel pending timers
+    if (debounceTimerRef.current) { clearTimeout(debounceTimerRef.current); debounceTimerRef.current = null }
+    if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null }
+    if (countdownTimerRef.current) { clearInterval(countdownTimerRef.current); countdownTimerRef.current = null }
+    setSyncCountdown(null)
+    // Auto-save current project before switching
+    if (excalidrawAPIRef.current && !isSyncingRef.current) {
+      const currentElements = excalidrawAPIRef.current.getSceneElements()
+      const currentHash = computeElementHash(currentElements)
+      if (currentHash !== lastSyncedHashRef.current) {
+        await syncToBackend()
+      }
+    }
+    try {
+      const res = await fetch('/api/project/active', {
+        method: 'PUT',
+        headers: tenantHeaders(),
+        body: JSON.stringify({ projectId })
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      if (data.success) {
+        setActiveProject({ id: data.project.id, name: data.project.name })
+        setProjectMenuOpen(false)
+        showToast(`Switched to "${data.project.name}"`)
+      }
+    } catch (err) {
+      console.error('Failed to switch project:', err)
+    }
+  }
+
+  const createProjectUI = async () => {
+    const name = newProjectName.trim()
+    if (!name) return
+    setIsCreatingProject(true)
+    try {
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: tenantHeaders(),
+        body: JSON.stringify({ name })
+      })
+      const data = await res.json()
+      if (data.success) {
+        setNewProjectName('')
+        await fetchProjects()
+        await switchProjectUI(data.project.id)
+        showToast(`Project "${name}" created`)
+      }
+    } catch (err) {
+      console.error('Failed to create project:', err)
+    } finally {
+      setIsCreatingProject(false)
+    }
+  }
+
+  const deleteProjectUI = async (projectId: string) => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: 'DELETE',
+        headers: tenantHeaders()
+      })
+      const data = await res.json()
+      if (data.success) {
+        setConfirmDeleteProjectId(null)
+        await fetchProjects()
+        showToast('Project deleted')
+      } else {
+        showToast(data.error ?? 'Delete failed', 4000)
+        setConfirmDeleteProjectId(null)
+      }
+    } catch (err) {
+      console.error('Failed to delete project:', err)
+      setConfirmDeleteProjectId(null)
+    }
+  }
+
   const syncToBackend = async (): Promise<void> => {
     if (!excalidrawAPI || isSyncingRef.current) return
 
     isSyncingRef.current = true
     setSyncStatus('syncing')
+    if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null }
+    if (countdownTimerRef.current) { clearInterval(countdownTimerRef.current); countdownTimerRef.current = null }
+    setSyncCountdown(null)
 
     try {
       const currentElements = excalidrawAPI.getSceneElements()
@@ -1316,6 +1482,20 @@ function App(): JSX.Element {
               <span className="tenant-label">Workspace:</span> {activeTenant.name} ▾
             </button>
           )}
+          {activeProject && (
+            <button
+              className="tenant-badge-btn project-badge-btn"
+              onClick={() => {
+                setProjectMenuOpen(o => {
+                  if (!o) fetchProjects()
+                  return !o
+                })
+              }}
+              title="Switch or create project"
+            >
+              <span className="tenant-label">Project:</span> {activeProject.name} ▾
+            </button>
+          )}
         </div>
 
         {toast && <div className="toast">{toast}</div>}
@@ -1332,7 +1512,11 @@ function App(): JSX.Element {
               onClick={syncToBackend}
               disabled={syncStatus === 'syncing' || !excalidrawAPI}
             >
-              {syncStatus === 'syncing' ? 'Syncing...' : 'Sync'}
+              {syncStatus === 'syncing'
+                ? 'Syncing...'
+                : syncCountdown !== null
+                  ? `Sync in ${syncCountdown}s`
+                  : 'Sync'}
             </button>
             <button
               className="btn-group-item"
@@ -1389,6 +1573,67 @@ function App(): JSX.Element {
           </div>
         )
       })()}
+
+      {/* Project menu overlay */}
+      {projectMenuOpen && (
+        <div className="menu-overlay" onClick={() => setProjectMenuOpen(false)}>
+          <div className="menu-panel project-menu-panel" onClick={e => e.stopPropagation()}>
+            <div className="menu-header">Projects</div>
+            <div className="menu-list">
+              {projectList.map(p => (
+                <div key={p.id} className="project-row">
+                  {confirmDeleteProjectId === p.id ? (
+                    <div className="project-delete-confirm">
+                      <span className="project-delete-msg">Delete "{p.name}"?</span>
+                      <button className="project-delete-yes" onClick={() => deleteProjectUI(p.id)}>Delete</button>
+                      <button className="project-delete-no" onClick={() => setConfirmDeleteProjectId(null)}>Cancel</button>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        className={`menu-item project-menu-item ${activeProject?.id === p.id ? 'menu-item-active' : ''}`}
+                        onClick={() => switchProjectUI(p.id)}
+                      >
+                        <span className="menu-item-name">{p.name}</span>
+                        {p.description && <span className="menu-item-path">{p.description}</span>}
+                        {activeProject?.id === p.id && <span className="menu-item-check">✓</span>}
+                      </button>
+                      {activeProject?.id !== p.id && projectList.length > 1 && (
+                        <button
+                          className="project-delete-btn"
+                          title="Delete project"
+                          onClick={e => { e.stopPropagation(); setConfirmDeleteProjectId(p.id) }}
+                        >
+                          🗑
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              ))}
+              {projectList.length === 0 && <div className="menu-empty">No projects yet</div>}
+            </div>
+            <div className="menu-create-wrap">
+              <input
+                ref={newProjectInputRef}
+                className="menu-search"
+                type="text"
+                placeholder="New project name..."
+                value={newProjectName}
+                onChange={e => setNewProjectName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') createProjectUI() }}
+              />
+              <button
+                className="menu-create-btn"
+                onClick={createProjectUI}
+                disabled={!newProjectName.trim() || isCreatingProject}
+              >
+                {isCreatingProject ? '...' : '+ Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Clear canvas confirmation modal (UI button only) */}
       {showClearConfirm && (

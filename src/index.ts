@@ -2748,7 +2748,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
 
         if (params.createName) {
           const newProject = dbCreateProject(params.createName, params.createDescription, dbGetActiveTenantId());
-          dbSetActiveProject(newProject.id);
+          // Switch via REST so the canvas broadcasts project_switched to the frontend
+          const switchRes = await fetch(`${EXPRESS_SERVER_URL}/api/project/active`, {
+            method: 'PUT',
+            headers: canvasHeaders(),
+            body: JSON.stringify({ projectId: newProject.id })
+          }).catch(() => null);
+          if (!switchRes) {
+            // Canvas unavailable — fall back to direct DB switch
+            dbSetActiveProject(newProject.id);
+          }
           logger.info('Created and switched to new project', { project: newProject });
           return {
             content: [{
@@ -2759,7 +2768,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         }
 
         if (params.projectId) {
-          dbSetActiveProject(params.projectId);
+          // Switch via REST so the canvas broadcasts project_switched to the frontend
+          const switchRes = await fetch(`${EXPRESS_SERVER_URL}/api/project/active`, {
+            method: 'PUT',
+            headers: canvasHeaders(),
+            body: JSON.stringify({ projectId: params.projectId })
+          }).catch(() => null);
+          if (!switchRes) {
+            // Canvas unavailable — fall back to direct DB switch
+            dbSetActiveProject(params.projectId);
+          }
           const active = dbGetActiveProject();
           logger.info('Switched project', { project: active });
           return {

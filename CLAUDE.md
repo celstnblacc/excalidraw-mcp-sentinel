@@ -38,7 +38,7 @@ node dist/server.js
 curl http://localhost:3000/health
 ```
 
-446 tests across unit, API, WebSocket, and regression suites. Run `npm test` or `pnpm test`. CI runs `type-check` then `build` then `test` across Node 18/20/22.
+477 tests across unit, API, WebSocket, e2e, and regression suites. Run `npm test` or `pnpm test`. CI runs `type-check` then `build` then `test` across Node 18/20/22.
 
 ## Architecture
 
@@ -112,7 +112,7 @@ Two Dockerfiles: `Dockerfile` (MCP server only), `Dockerfile.canvas` (canvas wit
 
 ### Security posture (as of 1.6.3)
 - `src/security.ts`: helmet, CORS allowlist, timing-safe API key auth, prototype pollution guard, 3-tier rate limiting, WS challenge-response auth, Mermaid input size cap
-- 446/446 tests passing; 4 regression tests cover previously crash-able sync paths
+- 477/477 tests passing; 4 regression tests cover previously crash-able sync paths
 - Docker: non-root user, resource limits, hardened `.dockerignore`
 
 ### Before running `npm publish`

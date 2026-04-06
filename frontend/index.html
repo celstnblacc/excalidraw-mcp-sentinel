@@ -467,6 +467,105 @@
             color: #aaa;
             font-size: 13px;
         }
+        .project-badge-btn {
+            background: #f3f0ff;
+            border-color: #e5dbff;
+            color: #5f3dc4;
+        }
+        .project-badge-btn:hover {
+            background: #e5dbff;
+            border-color: #d0bfff;
+        }
+        .project-menu-panel {
+            left: 220px;
+        }
+        .menu-create-wrap {
+            display: flex;
+            gap: 6px;
+            padding: 8px 10px 10px;
+            border-top: 1px solid #f0f0f0;
+        }
+        .menu-create-wrap .menu-search {
+            flex: 1;
+        }
+        .menu-create-btn {
+            padding: 7px 12px;
+            font-size: 13px;
+            font-weight: 600;
+            background: #5f3dc4;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.15s;
+        }
+        .menu-create-btn:hover:not(:disabled) { background: #4c2fa8; }
+        .menu-create-btn:disabled { opacity: 0.5; cursor: default; }
+        .project-row {
+            position: relative;
+            display: flex;
+            align-items: stretch;
+        }
+        .project-menu-item {
+            flex: 1;
+            padding-right: 36px;
+        }
+        .project-delete-btn {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            opacity: 0;
+            padding: 4px 6px;
+            border-radius: 4px;
+            transition: opacity 0.15s, background 0.15s;
+        }
+        .project-row:hover .project-delete-btn { opacity: 0.5; }
+        .project-delete-btn:hover { opacity: 1 !important; background: #fff0f0; }
+        .project-delete-confirm {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 12px;
+            background: #fff5f5;
+            border-radius: 6px;
+            width: 100%;
+        }
+        .project-delete-msg {
+            flex: 1;
+            font-size: 13px;
+            color: #c92a2a;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .project-delete-yes {
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            background: #e03131;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .project-delete-yes:hover { background: #c92a2a; }
+        .project-delete-no {
+            padding: 4px 10px;
+            font-size: 12px;
+            background: #f1f3f5;
+            color: #495057;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .project-delete-no:hover { background: #dee2e6; }
 
         /* Clear canvas confirmation dialog */
         .confirm-dialog {
