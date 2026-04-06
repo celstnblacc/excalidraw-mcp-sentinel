@@ -1,7 +1,5 @@
 import winston from 'winston';
 
-const LOG_FILE_PATH = process.env.LOG_FILE_PATH || 'excalidraw.log';
-
 const logger: winston.Logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
 
@@ -21,13 +19,15 @@ const logger: winston.Logger = winston.createLogger({
     new winston.transports.Console({
       level: 'warn',                 // only warn+error to stderr
       stderrLevels: ['warn','error']
-    }),
-
-    new winston.transports.File({
-      filename: LOG_FILE_PATH,    // all levels to file
-      level: 'debug'
     })
   ]
 });
+
+if (process.env.LOG_FILE_PATH) {
+  logger.add(new winston.transports.File({
+    filename: process.env.LOG_FILE_PATH,
+    level: 'debug'
+  }));
+}
 
 export default logger;
