@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
-import { initDb, closeDb, setElement, getAllElements, setSetting, getSetting, getCurrentSyncVersion, setActiveTenant } from '../../src/db.js';
+import { initDb, closeDb, setElement, getAllElements, setSetting, getSetting, getCurrentSyncVersion, setActiveTenant, getActiveProjectId, getElementCountForProject } from '../../src/db.js';
 import type { ServerElement } from '../../src/types.js';
 import path from 'path';
 import os from 'os';
@@ -651,5 +651,219 @@ describe('Text alignment fields — REST round-trip regression', () => {
 
     expect(updateRes.status).toBe(200);
     expect(updateRes.body.element?.textAlign).toBe('center');
+  });
+});
+
+// ─── Projects ─────────────────────────────────────────────────
+
+describe('GET /api/projects', () => {
+  it('returns the default project and marks it active', async () => {
+    const res = await request(app).get('/api/projects');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.projects)).toBe(true);
+    expect(res.body.projects.length).toBeGreaterThanOrEqual(1);
+    expect(res.body.activeProjectId).toBeTruthy();
+    const active = res.body.projects.find((p: any) => p.id === res.body.activeProjectId);
+    expect(active).toBeDefined();
+  });
+});
+
+describe('POST /api/projects', () => {
+  it('creates a new project and returns it', async () => {
+    const res = await request(app)
+      .post('/api/projects')
+      .send({ name: 'My Diagram', description: 'test desc' });
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.project.name).toBe('My Diagram');
+    expect(res.body.project.description).toBe('test desc');
+    expect(res.body.project.id).toBeTruthy();
+  });
+
+  it('returns 400 when name is missing', async () => {
+    const res = await request(app).post('/api/projects').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('returns 400 when name is blank', async () => {
+    const res = await request(app).post('/api/projects').send({ name: '   ' });
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('new project appears in GET /api/projects list', async () => {
+    await request(app).post('/api/projects').send({ name: 'Alpha' });
+    await request(app).post('/api/projects').send({ name: 'Beta' });
+    const res = await request(app).get('/api/projects');
+    const names = res.body.projects.map((p: any) => p.name);
+    expect(names).toContain('Alpha');
+    expect(names).toContain('Beta');
+  });
+});
+
+describe('PUT /api/project/active', () => {
+  it('switches the active project', async () => {
+    const created = await request(app)
+      .post('/api/projects')
+      .send({ name: 'Switch Target' });
+    const newId = created.body.project.id;
+
+    const res = await request(app)
+      .put('/api/project/active')
+      .send({ projectId: newId });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.project.id).toBe(newId);
+
+    // DB state reflects the switch
+    expect(getActiveProjectId()).toBe(newId);
+  });
+
+  it('returns 400 when projectId is missing', async () => {
+    const res = await request(app).put('/api/project/active').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('returns 400 for a non-existent projectId', async () => {
+    const res = await request(app)
+      .put('/api/project/active')
+      .send({ projectId: 'does-not-exist' });
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+});
+
+// ─── Project switch preserves elements ──────────────────────
+
+describe('Project switch round-trip — elements survive', () => {
+  it('elements saved in project A persist after switching to B and back', async () => {
+    // Create project "dude"
+    const dudeRes = await request(app).post('/api/projects').send({ name: 'dude' });
+    const dudeId = dudeRes.body.project.id;
+    const defaultId = getActiveProjectId(); // save original
+
+    // Switch to "dude"
+    await request(app).put('/api/project/active').send({ projectId: dudeId });
+    expect(getActiveProjectId()).toBe(dudeId);
+
+    // Draw 2 elements in "dude"
+    const el1 = makeElement({ id: 'dude-rect-1', type: 'rectangle', x: 10, y: 10, width: 100, height: 50 });
+    const el2 = makeElement({ id: 'dude-rect-2', type: 'rectangle', x: 200, y: 200, width: 120, height: 80 });
+    await request(app).post('/api/elements').send(el1);
+    await request(app).post('/api/elements').send(el2);
+
+    // Verify 2 elements in "dude"
+    const dudeElems1 = await request(app).get('/api/elements');
+    expect(dudeElems1.body.elements.length).toBe(2);
+
+    // Switch to "default"
+    await request(app).put('/api/project/active').send({ projectId: defaultId });
+    expect(getActiveProjectId()).toBe(defaultId);
+
+    // "default" should have 0 elements (fresh DB)
+    const defaultElems = await request(app).get('/api/elements');
+    expect(defaultElems.body.elements.length).toBe(0);
+
+    // Switch back to "dude"
+    await request(app).put('/api/project/active').send({ projectId: dudeId });
+    expect(getActiveProjectId()).toBe(dudeId);
+
+    // "dude" should still have the 2 elements
+    const dudeElems2 = await request(app).get('/api/elements');
+    expect(dudeElems2.body.elements.length).toBe(2);
+    const ids = dudeElems2.body.elements.map((e: any) => e.id);
+    expect(ids).toContain('dude-rect-1');
+    expect(ids).toContain('dude-rect-2');
+  });
+
+  it('elements in different projects are isolated', async () => {
+    // Create two projects
+    const projA = await request(app).post('/api/projects').send({ name: 'Project A' });
+    const projB = await request(app).post('/api/projects').send({ name: 'Project B' });
+    const aId = projA.body.project.id;
+    const bId = projB.body.project.id;
+
+    // Add element to Project A
+    await request(app).put('/api/project/active').send({ projectId: aId });
+    await request(app).post('/api/elements').send(
+      makeElement({ id: 'a-only', type: 'ellipse', x: 0, y: 0, width: 50, height: 50 })
+    );
+
+    // Add element to Project B
+    await request(app).put('/api/project/active').send({ projectId: bId });
+    await request(app).post('/api/elements').send(
+      makeElement({ id: 'b-only', type: 'diamond', x: 0, y: 0, width: 50, height: 50 })
+    );
+
+    // Verify isolation
+    const bElems = await request(app).get('/api/elements');
+    expect(bElems.body.elements.length).toBe(1);
+    expect(bElems.body.elements[0].id).toBe('b-only');
+
+    await request(app).put('/api/project/active').send({ projectId: aId });
+    const aElems = await request(app).get('/api/elements');
+    expect(aElems.body.elements.length).toBe(1);
+    expect(aElems.body.elements[0].id).toBe('a-only');
+  });
+});
+
+describe('DELETE /api/projects/:id', () => {
+  it('deletes a non-active project', async () => {
+    const created = await request(app).post('/api/projects').send({ name: 'To Delete' });
+    const id = created.body.project.id;
+
+    const res = await request(app).delete(`/api/projects/${id}`);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.projectId).toBe(id);
+
+    const list = await request(app).get('/api/projects');
+    const ids = list.body.projects.map((p: any) => p.id);
+    expect(ids).not.toContain(id);
+  });
+
+  it('cascades and deletes elements belonging to the project', async () => {
+    const created = await request(app).post('/api/projects').send({ name: 'With Elements' });
+    const id = created.body.project.id;
+
+    // Switch to new project and add an element
+    await request(app).put('/api/project/active').send({ projectId: id });
+    await request(app).post('/api/elements').send({ type: 'rectangle', x: 0, y: 0, width: 50, height: 50 });
+    expect(getElementCountForProject(id)).toBe(1);
+
+    // Switch back to default before deleting
+    const defaultId = getActiveProjectId() === id
+      ? (await request(app).get('/api/projects')).body.projects.find((p: any) => p.id !== id)?.id
+      : getActiveProjectId();
+    await request(app).put('/api/project/active').send({ projectId: defaultId });
+
+    await request(app).delete(`/api/projects/${id}`);
+    expect(getElementCountForProject(id)).toBe(0);
+  });
+
+  it('refuses to delete the active project', async () => {
+    // Create a second project so the "last project" guard doesn't fire first
+    await request(app).post('/api/projects').send({ name: 'Second' });
+    const activeId = getActiveProjectId();
+    const res = await request(app).delete(`/api/projects/${activeId}`);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/active/);
+  });
+
+  it('refuses to delete the last project', async () => {
+    // Only default project exists — try to delete it (it is also active, so both guards fire)
+    const activeId = getActiveProjectId();
+    const res = await request(app).delete(`/api/projects/${activeId}`);
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('returns 400 for a non-existent project', async () => {
+    const res = await request(app).delete('/api/projects/ghost-id');
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
   });
 });

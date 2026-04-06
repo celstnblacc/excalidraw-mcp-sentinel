@@ -28,7 +28,7 @@ import {
   BroadcastResult
 } from './types.js';
 import * as store from './db.js';
-import { initDb, listTenants as dbListTenants, getActiveTenant as dbGetActiveTenant, getTenantById, setActiveTenant as dbSetActiveTenant, getDefaultProjectForTenant, getProjectForTenant, getCurrentSyncVersion, getChangesSince } from './db.js';
+import { initDb, listTenants as dbListTenants, getActiveTenant as dbGetActiveTenant, getTenantById, setActiveTenant as dbSetActiveTenant, getDefaultProjectForTenant, getProjectForTenant, getCurrentSyncVersion, getChangesSince, setActiveProject as dbSetActiveProject, getActiveProject as dbGetActiveProject, getActiveProjectId as dbGetActiveProjectId, getActiveTenantId as dbGetActiveTenantId, listProjects as dbListProjects, createProject as dbCreateProject, deleteProject as dbDeleteProject, getElementCountForProject as dbGetElementCountForProject } from './db.js';
 import { z } from 'zod';
 import WebSocket from 'ws';
 
@@ -62,9 +62,11 @@ app.use(express.static(path.join(__dirname, '../dist/frontend'), { index: false 
 
 // Resolve tenant from X-Tenant-Id header to a projectId override.
 // Returns undefined when header is absent (browser requests), falling back to global state.
+// When the requesting tenant is the active tenant, use the active project (honours project switches).
 function resolveTenantProject(req: Request): string | undefined {
   const tenantId = req.headers['x-tenant-id'] as string | undefined;
   if (!tenantId) return undefined;
+  if (tenantId === dbGetActiveTenantId()) return dbGetActiveProjectId();
   return getDefaultProjectForTenant(tenantId);
 }
 
@@ -73,12 +75,14 @@ function resolveTenantProject(req: Request): string | undefined {
 function resolveScope(req: Request): { tenantId: string; projectId: string } {
   const headerTenantId = req.headers['x-tenant-id'] as string | undefined;
   if (headerTenantId) {
-    const projectId = getDefaultProjectForTenant(headerTenantId) ?? `${headerTenantId}-default`;
+    const projectId = headerTenantId === dbGetActiveTenantId()
+      ? dbGetActiveProjectId()
+      : (getDefaultProjectForTenant(headerTenantId) ?? `${headerTenantId}-default`);
     return { tenantId: headerTenantId, projectId };
   }
   // Fallback for browser requests without header
   const tenant = dbGetActiveTenant();
-  const projectId = getDefaultProjectForTenant(tenant.id) ?? `${tenant.id}-default`;
+  const projectId = dbGetActiveProjectId() ?? `${tenant.id}-default`;
   return { tenantId: tenant.id, projectId };
 }
 
@@ -1582,6 +1586,67 @@ app.put('/api/tenant/active', (req: Request, res: Response) => {
     res.json({ success: true, tenant });
   } catch (error) {
     logger.error('Error switching tenant:', error);
+    res.status(400).json({ success: false, error: (error as Error).message });
+  }
+});
+
+app.get('/api/projects', (req: Request, res: Response) => {
+  try {
+    const projects = dbListProjects();
+    const active = dbGetActiveProject();
+    res.json({ success: true, projects, activeProjectId: active.id });
+  } catch (error) {
+    logger.error('Error listing projects:', error);
+    res.status(500).json({ success: false, error: (error as Error).message });
+  }
+});
+
+app.post('/api/projects', (req: Request, res: Response) => {
+  try {
+    const { name, description } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ success: false, error: 'name is required' });
+    }
+    const project = dbCreateProject(name.trim(), description);
+    res.status(201).json({ success: true, project });
+  } catch (error) {
+    logger.error('Error creating project:', error);
+    res.status(400).json({ success: false, error: (error as Error).message });
+  }
+});
+
+app.delete('/api/projects/:id', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const elementCount = dbGetElementCountForProject(id!);
+    dbDeleteProject(id!);
+    broadcast({ type: 'project_deleted', projectId: id, elementCount } as any);
+    res.json({ success: true, projectId: id, elementCount });
+  } catch (error) {
+    logger.error('Error deleting project:', error);
+    res.status(400).json({ success: false, error: (error as Error).message });
+  }
+});
+
+app.put('/api/project/active', (req: Request, res: Response) => {
+  try {
+    const { projectId } = req.body;
+    if (!projectId || typeof projectId !== 'string') {
+      return res.status(400).json({ success: false, error: 'projectId is required' });
+    }
+
+    dbSetActiveProject(projectId);
+    const project = dbGetActiveProject();
+
+    broadcast({
+      type: 'project_switched',
+      projectId: project.id,
+      projectName: project.name
+    } as any);
+
+    res.json({ success: true, project });
+  } catch (error) {
+    logger.error('Error switching project:', error);
     res.status(400).json({ success: false, error: (error as Error).message });
   }
 });

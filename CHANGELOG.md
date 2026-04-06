@@ -5,6 +5,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-04-06
+
+### Added
+- Project management UI in canvas header: create, switch, delete projects with inline confirm
+- Sync countdown timer in header — shows seconds until next auto-sync after drawing stops
+- REST endpoints: `GET /api/projects`, `POST /api/projects`, `PUT /api/project/active`, `DELETE /api/projects/:id`
+- E2e test suite for project switching round-trips (`project-switch-e2e.test.ts`)
+- Sync countdown unit tests with fake timers (`sync-countdown.test.ts`)
+
+### Fixed
+- `resolveTenantProject` always returned first project by creation date instead of the active project — switching projects had no effect on element queries
+- `resolveScope` had the same bug, causing WebSocket broadcasts to target the wrong project
+- Switching projects while a sync countdown was pending could overwrite the new project with the old project's elements — pending sync now auto-saves before switching
+- `onChange` triggered sync countdown on selection/appState changes (not just element changes) — added element hash comparison to filter false triggers
+
+### Changed
+- Test count: 477/477 (was 446)
+
 ## [1.0.3] - 2026-03-30
 
 ### Fixed

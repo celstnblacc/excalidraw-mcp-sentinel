@@ -564,6 +564,22 @@ export function getActiveProjectId(): string {
   return activeProjectId;
 }
 
+export function deleteProject(id: string): void {
+  const projects = listProjects();
+  if (projects.length <= 1) throw new Error('Cannot delete the last project');
+  const project = db.prepare('SELECT id, tenant_id FROM projects WHERE id = ?').get(id) as { id: string; tenant_id: string } | undefined;
+  if (!project) throw new Error(`Project "${id}" not found`);
+  if (project.tenant_id !== activeTenantId) throw new Error(`Project "${id}" does not belong to the active tenant`);
+  if (id === activeProjectId) throw new Error('Cannot delete the active project — switch to another project first');
+  // CASCADE deletes elements, element_versions rows, and snapshots automatically
+  db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+}
+
+export function getElementCountForProject(projectId: string): number {
+  const row = db.prepare('SELECT COUNT(*) as cnt FROM elements WHERE project_id = ? AND (data NOT LIKE \'%"is_deleted":true%\')').get(projectId) as { cnt: number };
+  return row.cnt;
+}
+
 // ── Bulk operations (for sync endpoint) ──
 
 export function bulkReplaceElements(elements: ServerElement[], projectId?: string): number {
