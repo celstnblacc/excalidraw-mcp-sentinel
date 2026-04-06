@@ -134,6 +134,9 @@ function App(): JSX.Element {
   const newProjectInputRef = useRef<HTMLInputElement | null>(null)
   const [confirmDeleteProjectId, setConfirmDeleteProjectId] = useState<string | null>(null)
   const [confirmDeleteTenantId, setConfirmDeleteTenantId] = useState<string | null>(null)
+  const [batchSelectMode, setBatchSelectMode] = useState<boolean>(false)
+  const [selectedTenantIds, setSelectedTenantIds] = useState<Set<string>>(new Set())
+  const [confirmBatchDelete, setConfirmBatchDelete] = useState<boolean>(false)
 
   // Keep refs in sync so closures (WebSocket handlers) always see latest values
   useEffect(() => {
@@ -1325,6 +1328,38 @@ function App(): JSX.Element {
     }
   }
 
+  const batchDeleteTenants = async () => {
+    const ids = Array.from(selectedTenantIds)
+    try {
+      const res = await fetch('/api/tenants/batch-delete', {
+        method: 'POST',
+        headers: tenantHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ ids })
+      })
+      const data = await res.json()
+      const deleted = data.deletedCount ?? 0
+      const deletedIds = new Set((data.results ?? []).filter((r: { deleted: boolean }) => r.deleted).map((r: { id: string }) => r.id))
+      setTenantList(prev => prev.filter(t => !deletedIds.has(t.id)))
+      setSelectedTenantIds(new Set())
+      setConfirmBatchDelete(false)
+      setBatchSelectMode(false)
+      showToast(`${deleted} workspace${deleted !== 1 ? 's' : ''} deleted`)
+    } catch (err) {
+      console.error('Batch delete failed:', err)
+      showToast('Batch delete failed', 4000)
+      setConfirmBatchDelete(false)
+    }
+  }
+
+  const toggleTenantSelection = (id: string) => {
+    setSelectedTenantIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   const syncToBackend = async (): Promise<void> => {
     if (!excalidrawAPI || isSyncingRef.current) return
 
@@ -1569,10 +1604,37 @@ function App(): JSX.Element {
         const filtered = q
           ? tenantList.filter(t => t.name.toLowerCase().includes(q) || t.workspace_path.toLowerCase().includes(q))
           : tenantList
+        const selectableFiltered = filtered.filter(t => t.id !== activeTenant?.id)
         return (
-          <div className="menu-overlay" onClick={() => setMenuOpen(false)}>
+          <div className="menu-overlay" onClick={() => { setMenuOpen(false); setBatchSelectMode(false); setSelectedTenantIds(new Set()); setConfirmBatchDelete(false) }}>
             <div className="menu-panel" onClick={e => e.stopPropagation()}>
-              <div className="menu-header">Workspaces</div>
+              <div className="menu-header">
+                <span>Workspaces</span>
+                <button
+                  className={`batch-mode-toggle ${batchSelectMode ? 'batch-mode-active' : ''}`}
+                  title={batchSelectMode ? 'Exit selection mode' : 'Select workspaces to delete'}
+                  onClick={() => {
+                    setBatchSelectMode(prev => !prev)
+                    setSelectedTenantIds(new Set())
+                    setConfirmBatchDelete(false)
+                  }}
+                >
+                  {batchSelectMode ? 'Done' : 'Select'}
+                </button>
+              </div>
+              {batchSelectMode && selectableFiltered.length > 0 && (
+                <div className="batch-actions-bar">
+                  <button
+                    className="batch-action-btn"
+                    onClick={() => setSelectedTenantIds(new Set(selectableFiltered.map(t => t.id)))}
+                  >Select All</button>
+                  <button
+                    className="batch-action-btn"
+                    onClick={() => setSelectedTenantIds(new Set())}
+                  >Unselect All</button>
+                  <span className="batch-count">{selectedTenantIds.size} selected</span>
+                </div>
+              )}
               <div className="menu-search-wrap">
                 <input
                   ref={searchInputRef}
@@ -1592,6 +1654,25 @@ function App(): JSX.Element {
                         <button className="project-delete-yes" onClick={() => deleteTenantUI(t.id)}>Delete</button>
                         <button className="project-delete-no" onClick={() => setConfirmDeleteTenantId(null)}>Cancel</button>
                       </div>
+                    ) : batchSelectMode ? (
+                      <label className={`menu-item batch-item ${activeTenant?.id === t.id ? 'menu-item-active batch-item-disabled' : ''}`}>
+                        <input
+                          type="checkbox"
+                          className="batch-checkbox"
+                          disabled={activeTenant?.id === t.id}
+                          checked={selectedTenantIds.has(t.id)}
+                          onChange={() => toggleTenantSelection(t.id)}
+                        />
+                        <span className="batch-item-content">
+                          <span className="menu-item-name">{t.name}</span>
+                          <span className="menu-item-path" title={t.workspace_path}>
+                            {t.workspace_path.length > 40
+                              ? '...' + t.workspace_path.slice(-37)
+                              : t.workspace_path}
+                          </span>
+                        </span>
+                        {activeTenant?.id === t.id && <span className="batch-active-label">active</span>}
+                      </label>
                     ) : (
                       <>
                         <button
@@ -1619,6 +1700,21 @@ function App(): JSX.Element {
                 ))}
                 {filtered.length === 0 && <div className="menu-empty">No matching workspaces</div>}
               </div>
+              {batchSelectMode && selectedTenantIds.size > 0 && (
+                <div className="batch-delete-bar">
+                  {confirmBatchDelete ? (
+                    <div className="batch-delete-confirm">
+                      <span className="batch-delete-msg">Delete {selectedTenantIds.size} workspace{selectedTenantIds.size !== 1 ? 's' : ''}?</span>
+                      <button className="project-delete-yes" onClick={batchDeleteTenants}>Delete</button>
+                      <button className="project-delete-no" onClick={() => setConfirmBatchDelete(false)}>Cancel</button>
+                    </div>
+                  ) : (
+                    <button className="batch-delete-btn" onClick={() => setConfirmBatchDelete(true)}>
+                      Delete {selectedTenantIds.size} workspace{selectedTenantIds.size !== 1 ? 's' : ''}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )

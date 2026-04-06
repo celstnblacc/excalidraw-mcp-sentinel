@@ -1050,21 +1050,11 @@ const server = new Server(
   }
 );
 
-// Helper function to convert text property to label format for Excalidraw
+// Helper function: previously converted text → label format for Excalidraw.
+// Now a no-op because the canvas REST API materializes label/text into native
+// bound text elements at write time (materializeLabel in server.ts).
 function convertTextToLabel(element: ServerElement): ServerElement {
-  const { text, ...rest } = element;
-  // text === undefined means the caller didn't touch the text field — leave as-is
-  if (text === undefined) return element;
-  // Standalone text elements keep text as a direct property
-  if (element.type === 'text') return element;
-  // All container/shape/arrow elements: map text → label.text (empty string clears it)
-  // Default containers to top-center alignment for title/subtitle layout
-  const isArrow = element.type === 'arrow' || element.type === 'line';
-  return {
-    ...rest,
-    verticalAlign: (rest as any).verticalAlign ?? (isArrow ? 'middle' : 'top'),
-    label: { text }
-  } as ServerElement;
+  return element;
 }
 
 // Set up request handler for tool calls
@@ -2411,7 +2401,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         const boundTextElements: Record<string, any>[] = [];
         let indexCounter = 0;
 
-        function makeBaseElement(el: any, rest: any): Record<string, any> {
+        // Build a set of element IDs that are already native bound-text elements
+        // (i.e. stored with containerId). For their containers, skip label→text
+        // generation so we don't create duplicate text elements.
+        const nativeBoundTextContainerIds = new Set<string>(
+          urlExportElements
+            .filter((e: any) => e.type === 'text' && e.containerId)
+            .map((e: any) => e.containerId as string)
+        );
+
+        function makeBaseElement(el: any, rest: any, storedVersion?: number): Record<string, any> {
+          const isRoundedShape = el.type === 'rectangle' || el.type === 'diamond' || el.type === 'ellipse';
           return {
             ...rest,
             angle: rest.angle ?? 0,
@@ -2425,16 +2425,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
             groupIds: rest.groupIds ?? [],
             frameId: rest.frameId ?? null,
             index: rest.index ?? `a${indexCounter++}`,
-            roundness: rest.roundness ?? (
-              el.type === 'rectangle' || el.type === 'diamond' || el.type === 'ellipse'
-                ? { type: 3 } : null
-            ),
+            roundness: rest.roundness ?? (isRoundedShape ? { type: 3 } : null),
             seed: rest.seed ?? Math.floor(Math.random() * 2147483647),
-            version: rest.version ?? 1,
+            version: storedVersion ?? rest.version ?? 1,
             versionNonce: rest.versionNonce ?? Math.floor(Math.random() * 2147483647),
             isDeleted: false,
             boundElements: rest.boundElements ?? null,
-            updated: Date.now(),
+            updated: rest.updated ?? Date.now(),
             link: rest.link ?? null,
             locked: rest.locked ?? false
           };
@@ -2449,46 +2446,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
             ...rest
           } = el as any;
 
-          const base = makeBaseElement(el, rest);
+          const base = makeBaseElement(el, rest, _ver);
 
-          // Standalone text elements: keep text directly
+          // Text elements: trust stored native fields, fill gaps only
           if (el.type === 'text') {
-            base.text = text ?? '';
-            base.originalText = text ?? '';
-            base.fontSize = rest.fontSize ?? USER_PREFS.fontSize;
-            base.fontFamily = rest.fontFamily ?? USER_PREFS.fontFamily;
-            base.textAlign = rest.textAlign ?? 'center';
-            base.verticalAlign = rest.verticalAlign ?? (rest.containerId ? 'top' : 'middle');
-            base.autoResize = rest.autoResize ?? true;
-            base.lineHeight = rest.lineHeight ?? 1.25;
-            base.containerId = rest.containerId ?? null;
+            base.text         = text ?? rest.text ?? '';
+            base.originalText = rest.originalText ?? base.text;
+            base.fontSize     = rest.fontSize     ?? USER_PREFS.fontSize;
+            base.fontFamily   = rest.fontFamily   ?? USER_PREFS.fontFamily;
+            base.textAlign    = rest.textAlign    ?? 'left';
+            base.verticalAlign = rest.verticalAlign ?? (rest.containerId ? 'middle' : 'top');
+            base.autoResize   = rest.autoResize   ?? true;
+            base.lineHeight   = rest.lineHeight   ?? 1.25;
+            base.containerId  = rest.containerId  ?? null;
             cleanedExportElements.push(base);
             continue;
           }
 
-          // Arrows: server already resolved bindings (start/end → startBinding/endBinding + positions)
+          // Arrows/lines: trust stored fields, fill gaps only
           if (el.type === 'arrow' || el.type === 'line') {
-            base.points = rest.points ?? [[0, 0], [100, 0]];
-            base.lastCommittedPoint = null;
-            // Preserve server-resolved bindings with fixedPoint for excalidraw.com
-            if (rest.startBinding) {
-              base.startBinding = { ...rest.startBinding, fixedPoint: rest.startBinding.fixedPoint ?? null };
-            } else {
-              base.startBinding = null;
-            }
-            if (rest.endBinding) {
-              base.endBinding = { ...rest.endBinding, fixedPoint: rest.endBinding.fixedPoint ?? null };
-            } else {
-              base.endBinding = null;
-            }
+            base.points             = rest.points             ?? [[0, 0], [100, 0]];
+            base.lastCommittedPoint = rest.lastCommittedPoint ?? null;
+            base.startBinding       = rest.startBinding
+              ? { ...rest.startBinding, fixedPoint: rest.startBinding.fixedPoint ?? null }
+              : null;
+            base.endBinding         = rest.endBinding
+              ? { ...rest.endBinding, fixedPoint: rest.endBinding.fixedPoint ?? null }
+              : null;
             base.startArrowhead = rest.startArrowhead ?? null;
-            base.endArrowhead = rest.endArrowhead ?? (el.type === 'arrow' ? 'arrow' : null);
-            base.elbowed = rest.elbowed ?? false;
+            base.endArrowhead   = rest.endArrowhead   ?? (el.type === 'arrow' ? 'arrow' : null);
+            base.elbowed        = rest.elbowed        ?? false;
           }
 
-          // Generate bound text element for label on shapes and arrows
+          // Generate bound text element for label on shapes and arrows.
+          // Skip if the shape already has a native bound text element stored
+          // (containerId-based) — generating one here would create a duplicate.
           const labelText = label?.text || text;
-          if (labelText) {
+          if (labelText && !nativeBoundTextContainerIds.has(base.id)) {
             const textId = `${base.id}-label`;
             // Add binding reference to parent
             base.boundElements = [

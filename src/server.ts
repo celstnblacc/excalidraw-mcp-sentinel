@@ -499,7 +499,7 @@ const ElementSharedFieldsSchema = z.object({
   fileId: z.string().optional(),
   status: z.string().optional(),
   scale: z.tuple([z.number(), z.number()]).optional(),
-});
+}).passthrough(); // preserve all native Excalidraw fields not listed above
 
 const CreateElementSchema = ElementSharedFieldsSchema.extend({
   id: z.string().optional(),
@@ -559,19 +559,24 @@ app.post('/api/elements', async (req: Request, res: Response) => {
       version: 1
     };
 
-    const sv = store.setElement(id, element, projId);
+    const { container, boundText } = materializeLabel(element);
+    const sv = store.setElement(container.id, container, projId);
+    if (boundText) {
+      store.setElement(boundText.id, boundText, projId);
+    }
 
     const scope = resolveScope(req);
     const message: ElementCreatedMessage = {
       type: 'element_created',
-      element: element
+      element: container
     };
     message['sync_version'] = sv;
     const ackResult = await serializedBroadcastWithAck(scope.tenantId, scope.projectId, message);
 
     res.json({
       success: true,
-      element: element,
+      element: container,
+      boundTextElement: boundText ?? undefined,
       syncedToCanvas: ackResult.acked,
       canvasStatus: {
         connectedBrowsers: ackResult.delivered,
@@ -620,19 +625,39 @@ app.put('/api/elements/:id', async (req: Request, res: Response) => {
       version: (existingElement.version || 0) + 1
     };
 
-    const sv = store.setElement(id, updatedElement, projId);
+    // Find existing bound text ID so we update rather than create a duplicate
+    const existingBound = (existingElement as any).boundElements as Array<{ id: string; type: string }> | null;
+    const existingBoundTextId = existingBound?.find((b) => b.type === 'text')?.id;
+
+    const { container, boundText } = materializeLabel(updatedElement, existingBoundTextId);
+    const sv = store.setElement(id, container, projId);
+
+    if (boundText) {
+      const existingBT = existingBoundTextId ? store.getElement(existingBoundTextId, projId) : null;
+      const btToSave = existingBT
+        ? {
+            ...existingBT,
+            text: boundText.text,
+            originalText: boundText.originalText,
+            updatedAt: boundText.updatedAt,
+            version: (existingBT.version || 0) + 1
+          }
+        : boundText;
+      store.setElement(btToSave.id, btToSave as ServerElement, projId);
+    }
 
     const scope = resolveScope(req);
     const message: ElementUpdatedMessage = {
       type: 'element_updated',
-      element: updatedElement
+      element: container
     };
     message['sync_version'] = sv;
     const ackResult = await serializedBroadcastWithAck(scope.tenantId, scope.projectId, message);
 
     res.json({
       success: true,
-      element: updatedElement,
+      element: container,
+      boundTextElement: boundText ?? undefined,
       syncedToCanvas: ackResult.acked,
       canvasStatus: {
         connectedBrowsers: ackResult.delivered,
@@ -847,6 +872,68 @@ function computeEdgePoint(
   }
 }
 
+// Helper: materialize a shape's label/text into a native bound text element.
+// When a container shape arrives with `label.text` or a `text` field, we create
+// a proper Excalidraw bound-text element (containerId ↔ boundElements) instead
+// of storing the MCP label format.  Returns the cleaned container and the new
+// bound-text element (null if nothing to materialize).
+function materializeLabel(
+  element: ServerElement,
+  existingBoundTextId?: string
+): { container: ServerElement; boundText: ServerElement | null } {
+  const NON_CONTAINER_TYPES = new Set(['text', 'arrow', 'line', 'freedraw', 'image']);
+  if (NON_CONTAINER_TYPES.has(element.type ?? '')) {
+    return { container: element, boundText: null };
+  }
+
+  // Accept both { label: { text } } (MCP format) and { text } (direct) formats
+  const labelText: string | undefined =
+    ((element as any).label as { text?: string } | undefined)?.text ??
+    (element.type !== 'text' ? (element as any).text as string | undefined : undefined);
+
+  if (!labelText) {
+    return { container: element, boundText: null };
+  }
+
+  const boundTextId = existingBoundTextId ?? `${element.id}-label`;
+
+  const boundText: ServerElement = {
+    id: boundTextId,
+    type: 'text',
+    x: element.x ?? 0,
+    y: element.y ?? 0,
+    width: element.width ?? 200,
+    height: element.height ?? 80,
+    text: labelText,
+    originalText: labelText,
+    fontSize: 20,
+    fontFamily: 5,
+    textAlign: 'center',
+    verticalAlign: 'middle',
+    autoResize: true,
+    lineHeight: 1.25,
+    containerId: element.id,
+    strokeColor: (element as any).strokeColor ?? '#1e1e1e',
+    opacity: (element as any).opacity ?? 100,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    version: 1,
+  } as unknown as ServerElement;
+
+  // Strip label/text from container, set boundElements
+  const { label: _label, text: _text, ...containerRest } = element as any;
+  const existingBound: Array<{ id: string; type: string }> = containerRest.boundElements ?? [];
+  const alreadyBound = existingBound.some((b) => b.id === boundTextId);
+  const container: ServerElement = {
+    ...containerRest,
+    boundElements: alreadyBound
+      ? existingBound
+      : [...existingBound, { id: boundTextId, type: 'text' }],
+  };
+
+  return { container, boundText };
+}
+
 // Helper: resolve arrow bindings in a batch
 function resolveArrowBindings(batchElements: ServerElement[], projectId?: string): void {
   const elementMap = new Map<string, ServerElement>();
@@ -953,7 +1040,9 @@ app.post('/api/elements/batch', async (req: Request, res: Response) => {
         version: 1
       };
 
-      createdElements.push(element);
+      const { container, boundText } = materializeLabel(element);
+      createdElements.push(container);
+      if (boundText) createdElements.push(boundText);
     });
 
     resolveArrowBindings(createdElements, projId);
@@ -1599,6 +1688,35 @@ app.delete('/api/tenants/:id', (req: Request, res: Response) => {
   } catch (error) {
     logger.error('Error deleting tenant:', error);
     res.status(400).json({ success: false, error: (error as Error).message });
+  }
+});
+
+app.post('/api/tenants/batch-delete', destructiveRateLimit, (req: Request, res: Response) => {
+  try {
+    const { ids } = req.body as { ids?: string[] };
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
+      return;
+    }
+    if (ids.length > 50) {
+      res.status(400).json({ success: false, error: 'Cannot delete more than 50 tenants at once' });
+      return;
+    }
+    const results: { id: string; deleted: boolean; error?: string }[] = [];
+    for (const id of ids) {
+      try {
+        dbDeleteTenant(id);
+        broadcast({ type: 'tenant_deleted', tenantId: id } as any);
+        results.push({ id, deleted: true });
+      } catch (err) {
+        results.push({ id, deleted: false, error: (err as Error).message });
+      }
+    }
+    const deletedCount = results.filter(r => r.deleted).length;
+    res.json({ success: true, deletedCount, results });
+  } catch (error) {
+    logger.error('Error batch-deleting tenants:', error);
+    res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 

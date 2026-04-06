@@ -402,6 +402,9 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
             border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
         .menu-search-wrap {
             padding: 8px 10px 4px;
@@ -572,6 +575,110 @@
             cursor: pointer;
         }
         .project-delete-no:hover { background: #dee2e6; }
+
+        /* Batch selection mode */
+        .batch-mode-toggle {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #f8f9fa;
+            color: #555;
+            cursor: pointer;
+            text-transform: none;
+            letter-spacing: 0;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .batch-mode-toggle:hover { background: #e9ecef; border-color: #ccc; }
+        .batch-mode-active { background: #e8f5e9; border-color: #a5d6a7; color: #2e7d32; }
+        .batch-mode-active:hover { background: #c8e6c9; }
+        .batch-actions-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-bottom: 1px solid #f0f0f0;
+            background: #fafafa;
+        }
+        .batch-action-btn {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #fff;
+            color: #555;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .batch-action-btn:hover { background: #e9ecef; }
+        .batch-count {
+            font-size: 11px;
+            color: #888;
+            margin-left: auto;
+        }
+        .batch-item {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            cursor: pointer;
+            gap: 10px;
+        }
+        .batch-item-disabled {
+            opacity: 0.5;
+            cursor: default;
+        }
+        .batch-checkbox {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            accent-color: #e03131;
+            cursor: pointer;
+        }
+        .batch-item-disabled .batch-checkbox { cursor: default; }
+        .batch-item-content {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .batch-active-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: #4caf50;
+            text-transform: uppercase;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+        .batch-delete-bar {
+            padding: 8px 12px;
+            border-top: 1px solid #f0f0f0;
+            background: #fff5f5;
+        }
+        .batch-delete-btn {
+            width: 100%;
+            padding: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            background: #e03131;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .batch-delete-btn:hover { background: #c92a2a; }
+        .batch-delete-confirm {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .batch-delete-msg {
+            flex: 1;
+            font-size: 13px;
+            color: #c92a2a;
+            font-weight: 500;
+        }
 
         /* Clear canvas confirmation dialog */
         .confirm-dialog {

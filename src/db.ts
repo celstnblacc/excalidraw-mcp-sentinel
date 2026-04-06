@@ -264,6 +264,96 @@ export function getDefaultProjectForTenant(tenantId: string): string {
   return id;
 }
 
+// ── Native field normalization ──
+
+// Fill any missing native Excalidraw fields so every element stored in the DB
+// is a complete, round-trippable Excalidraw element — not just an MCP partial.
+function fillNativeFields(element: ServerElement): ServerElement {
+  const el = element as any;
+
+  // ── Universal fields ──────────────────────────────────────────────────────
+  el.angle           = el.angle           ?? 0;
+  el.strokeColor     = el.strokeColor     ?? '#1e1e1e';
+  el.backgroundColor = el.backgroundColor ?? 'transparent';
+  el.fillStyle       = el.fillStyle       ?? 'solid';
+  el.strokeWidth     = el.strokeWidth     ?? 2;
+  el.strokeStyle     = el.strokeStyle     ?? 'solid';
+  el.roughness       = el.roughness       ?? 1;
+  el.opacity         = el.opacity         ?? 100;
+  el.groupIds        = el.groupIds        ?? [];
+  el.frameId         = el.frameId         ?? null;
+  el.seed            = el.seed            ?? Math.floor(Math.random() * 2147483647);
+  el.versionNonce    = el.versionNonce    ?? Math.floor(Math.random() * 2147483647);
+  el.isDeleted       = el.isDeleted       ?? false;
+  el.updated         = el.updated         ?? Date.now();
+  el.link            = el.link            ?? null;
+  el.locked          = el.locked          ?? false;
+  el.boundElements   = el.boundElements   ?? null;
+
+  // index: preserve existing; generate a stable sortable value if absent
+  if (!el.index) {
+    el.index = `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+  }
+
+  // roundness: Excalidraw default is rounded (type 3) for closed shapes
+  if (el.roundness === undefined) {
+    const rounded = el.type === 'rectangle' || el.type === 'diamond' || el.type === 'ellipse';
+    el.roundness = rounded ? { type: 3 } : null;
+  }
+
+  // ── Type-specific fields ──────────────────────────────────────────────────
+  if (el.type === 'text') {
+    el.text          = el.text          ?? '';
+    el.originalText  = el.originalText  ?? el.text;
+    el.fontSize      = el.fontSize      ?? 20;
+    el.fontFamily    = el.fontFamily    ?? 5;       // Nunito
+    el.textAlign     = el.textAlign     ?? 'left';
+    el.verticalAlign = el.verticalAlign ?? (el.containerId ? 'middle' : 'top');
+    el.autoResize    = el.autoResize    ?? true;
+    el.lineHeight    = el.lineHeight    ?? 1.25;
+    el.containerId   = el.containerId   ?? null;
+  } else if (el.type === 'arrow' || el.type === 'line') {
+    el.points             = el.points             ?? [[0, 0], [100, 0]];
+    el.lastCommittedPoint = el.lastCommittedPoint ?? null;
+    el.startBinding       = el.startBinding       ?? null;
+    el.endBinding         = el.endBinding         ?? null;
+    el.startArrowhead     = el.startArrowhead     ?? null;
+    el.endArrowhead       = el.endArrowhead       ?? (el.type === 'arrow' ? 'arrow' : null);
+    el.elbowed            = el.elbowed            ?? false;
+  } else if (el.type === 'image') {
+    el.status = el.status ?? 'pending';
+    el.scale  = el.scale  ?? [1, 1];
+  } else if (el.type === 'freedraw') {
+    el.points             = el.points             ?? [];
+    el.pressures          = el.pressures          ?? [];
+    el.simulatePressure   = el.simulatePressure   ?? true;
+    el.lastCommittedPoint = el.lastCommittedPoint ?? null;
+  }
+
+  return el as ServerElement;
+}
+
+// When a text element with containerId is saved, ensure the container's
+// boundElements array references it back. Both sides must be consistent
+// for Excalidraw to treat the text as embedded in the shape.
+function repairContainerBinding(element: ServerElement, projectId?: string): void {
+  if (element.type !== 'text') return;
+  const cid = (element as any).containerId as string | null | undefined;
+  if (!cid) return;
+  const container = getElement(cid, projectId);
+  if (!container) return;
+  const existing: any[] = Array.isArray((container as any).boundElements)
+    ? (container as any).boundElements as any[]
+    : [];
+  if (existing.some((b: any) => b.id === element.id)) return;
+  // Update container directly — container.type is never 'text' so this
+  // cannot recurse back into repairContainerBinding.
+  setElement(cid, {
+    ...container,
+    boundElements: [...existing, { type: 'text', id: element.id }]
+  } as ServerElement, projectId);
+}
+
 // ── Element CRUD ──
 
 export function getElement(id: string, projectId?: string): ServerElement | undefined {
@@ -283,8 +373,9 @@ export function hasElement(id: string, projectId?: string): boolean {
 export function setElement(id: string, element: ServerElement, projectId?: string): number {
   const p = pid(projectId);
   const now = new Date().toISOString();
-  const data = JSON.stringify(element);
-  const labelText = extractLabelText(element);
+  const normalized = fillNativeFields(element);
+  const data = JSON.stringify(normalized);
+  const labelText = extractLabelText(normalized);
   const sv = incrementSyncVersion(p);
   const existing = db.prepare(
     'SELECT version, is_deleted FROM elements WHERE id = ? AND project_id = ?'
@@ -295,19 +386,20 @@ export function setElement(id: string, element: ServerElement, projectId?: strin
     db.prepare(`
       UPDATE elements SET type = ?, data = ?, label_text = ?, updated_at = ?, version = ?, is_deleted = 0, sync_version = ?
       WHERE id = ? AND project_id = ?
-    `).run(element.type, data, labelText, now, newVersion, sv, id, p);
+    `).run(normalized.type, data, labelText, now, newVersion, sv, id, p);
 
     recordVersion(id, newVersion, data, existing.is_deleted ? 'create' : 'update', p);
-    updateFts(id, labelText, element.type);
+    updateFts(id, labelText, normalized.type);
   } else {
     db.prepare(`
       INSERT INTO elements (id, project_id, type, data, label_text, created_at, updated_at, version, sync_version)
       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
-    `).run(id, p, element.type, data, labelText, now, now, sv);
+    `).run(id, p, normalized.type, data, labelText, now, now, sv);
 
     recordVersion(id, 1, data, 'create', p);
-    insertFts(id, labelText, element.type);
+    insertFts(id, labelText, normalized.type);
   }
+  repairContainerBinding(normalized, projectId);
   return sv;
 }
 

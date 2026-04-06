@@ -5,6 +5,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-04-06
+
+### Added
+- Batch workspace select/delete UI: Select/Unselect All, per-row checkboxes,
+  Delete N workspaces button with confirmation — active workspace is disabled
+  from selection
+- `POST /api/tenants/batch-delete` endpoint — delete up to 50 tenants in one
+  request with per-tenant cascade (projects, elements, snapshots)
+- `fillNativeFields()` in db layer — fills all universal and type-specific
+  native Excalidraw fields (angle, strokeColor, roundness, seed, etc.) on
+  every write so elements are identical to those produced by the VSCode
+  Excalidraw extension
+- `repairContainerBinding()` in db layer — enforces bidirectional
+  `containerId` ↔ `boundElements` binding on every write path (create, update,
+  batch, sync/v2) so text labels always follow their container when moved
+- Server-side label materialization (`materializeLabel` in server.ts): MCP
+  `create_element`/`update_element` calls with `label.text` or `text` on a
+  shape now produce a native bound text element in the DB instead of an MCP
+  label stub — no synthetic generation required on export
+- 42 new backend non-regression tests for native field preservation, container
+  binding repair, and label materialization (519 total)
+
 ## [1.0.6] - 2026-04-06
 
 ### Added
