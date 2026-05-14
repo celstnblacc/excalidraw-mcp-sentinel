@@ -156,3 +156,5 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Fixed
 - `npm install -g excalidraw-mcp-sentinel` crashed on Windows — `postinstall` script used Unix-only `2>/dev/null || true` syntax which cmd.exe does not support; replaced with a cross-platform `node -e` inline script
+
+- 2026-05-14: chore(ci): release workflow now manual (workflow_dispatch) -- no longer fires automatically on every CI pass on main
