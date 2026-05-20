@@ -136,3 +136,7 @@ When exploring or understanding code in supported languages (JS, TS, Python, Go,
 - Use `smart_outline(file_path)` instead of Read to understand file structure (~1-2K tokens vs ~12K+)
 - Use `smart_unfold(file_path, symbol_name)` instead of Read for viewing specific functions (~400-2K tokens)
 - Fall back to Grep for exact string/regex searches, Read for non-code files and files under 100 lines
+
+## Strict Installation Decoupling
+
+Once installed (e.g., to ~/.local/bin), the project binary must NEVER depend on the local repository path (~/DevOpsSec) for execution, configuration, or data. All paths must be relative to the installation root or use standard system config paths (~/.config).

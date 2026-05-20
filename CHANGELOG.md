@@ -156,3 +156,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Fixed
 - `npm install -g excalidraw-mcp-sentinel` crashed on Windows — `postinstall` script used Unix-only `2>/dev/null || true` syntax which cmd.exe does not support; replaced with a cross-platform `node -e` inline script
+
+- 2026-05-14: chore(ci): release workflow now manual (workflow_dispatch) -- no longer fires automatically on every CI pass on main
+
+## [1.2.0] - 2026-05-20
+
+### Added
+- Streamable HTTP transport mode (`MCP_TRANSPORT=http`): single long-lived process serves all MCP clients over HTTP instead of spawning a new stdio process per session. Each client gets its own isolated `Server` instance routed by `mcp-session-id` header. Eliminates per-session process overhead for multi-session setups.
+- `src/mcp-http.ts`: `mountMcpRoutes`, `startMcpHttpServer`, `resolveTransportMode` — full HTTP session lifecycle (POST/GET/DELETE /mcp, session map, `StreamableHTTPServerTransport`)
+- `createMcpServer()` factory and `registerHandlers()` in `src/index.ts` — clean per-session server instantiation for HTTP mode
+- 9 new tests in `tests/backend/mcp-http.test.ts` covering transport resolution, session isolation, session teardown, and `startMcpHttpServer`
+- `CLAUDE.md`: Strict Installation Decoupling rule
+- launchd agent (`~/Library/LaunchAgents/com.user.excalidraw-mcp.plist`) for single-instance persistence on macOS
+
+### Changed
+- `runServer()` now checks `MCP_TRANSPORT` env var; defaults to stdio (backward-compatible)
+- `fs.writeFileSync`/`readFileSync` calls in export/import tool handlers converted to `fs.promises` async variants
+
+### Total tests: 528 (31 files)
