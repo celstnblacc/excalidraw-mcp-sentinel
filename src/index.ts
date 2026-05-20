@@ -35,6 +35,7 @@ import {
 } from './types.js';
 import fetch from 'node-fetch';
 import { startCanvasServer, stopCanvasServer } from './server.js';
+import { startMcpHttpServer, resolveTransportMode } from './mcp-http.js';
 import {
   initDb, closeDb,
   searchElements as dbSearchElements,
@@ -1034,21 +1035,29 @@ const tools: Tool[] = [
 ];
 
 // Initialize MCP server
-const server = new Server(
-  {
-    name: "mcp-excalidraw-server",
-    version: "2.0.0",
-    description: "Programmatic canvas toolkit for Excalidraw with file I/O, image export, and real-time sync"
-  },
-  {
-    capabilities: {
-      tools: Object.fromEntries(tools.map(tool => [tool.name, {
-        description: tool.description,
-        inputSchema: tool.inputSchema
-      }]))
+// Build a fresh MCP server with all request handlers registered. Called once
+// for the stdio singleton below, and once per client session in HTTP mode.
+function createMcpServer(): Server {
+  const server = new Server(
+    {
+      name: "mcp-excalidraw-server",
+      version: "2.0.0",
+      description: "Programmatic canvas toolkit for Excalidraw with file I/O, image export, and real-time sync"
+    },
+    {
+      capabilities: {
+        tools: Object.fromEntries(tools.map(tool => [tool.name, {
+          description: tool.description,
+          inputSchema: tool.inputSchema
+        }]))
+      }
     }
-  }
-);
+  );
+  registerHandlers(server);
+  return server;
+}
+
+const server = createMcpServer();
 
 // Helper function: previously converted text → label format for Excalidraw.
 // Now a no-op because the canvas REST API materializes label/text into native
@@ -1056,6 +1065,10 @@ const server = new Server(
 function convertTextToLabel(element: ServerElement): ServerElement {
   return element;
 }
+
+// Register all request handlers on a server instance. Module-scope so it can be
+// called per-session in HTTP mode and once for the stdio singleton.
+function registerHandlers(server: Server): void {
 
 // Set up request handler for tool calls
 server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest) => {
@@ -1855,7 +1868,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
 
         if (params.filePath) {
           const safePath = sanitizeFilePath(params.filePath);
-          fs.writeFileSync(safePath, jsonString, 'utf-8');
+          await fs.promises.writeFile(safePath, jsonString, 'utf-8');
           return {
             content: [{
               type: 'text',
@@ -1884,7 +1897,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         let sceneData: any;
         if (params.filePath) {
           const safeImportPath = sanitizeFilePath(params.filePath);
-          const fileContent = fs.readFileSync(safeImportPath, 'utf-8');
+          const fileContent = await fs.promises.readFile(safeImportPath, 'utf-8');
           sceneData = JSON.parse(fileContent);
           assertNoDangerousKeys(sceneData, 'import_scene filePath');
         } else if (params.data) {
@@ -1996,9 +2009,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         if (params.filePath) {
           const safeImagePath = sanitizeFilePath(params.filePath);
           if (params.format === 'svg') {
-            fs.writeFileSync(safeImagePath, result.data, 'utf-8');
+            await fs.promises.writeFile(safeImagePath, result.data, 'utf-8');
           } else {
-            fs.writeFileSync(safeImagePath, Buffer.from(result.data, 'base64'));
+            await fs.promises.writeFile(safeImagePath, Buffer.from(result.data, 'base64'));
           }
           return {
             content: [{
@@ -2874,6 +2887,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return { tools };
 });
 
+} // end registerHandlers
+
 // Start server
 async function runServer(): Promise<void> {
   try {
@@ -2902,6 +2917,26 @@ async function runServer(): Promise<void> {
     } catch (canvasError) {
       logger.warn('Canvas server failed to start:', (canvasError as Error).message);
       logger.warn('MCP tools will work without real-time canvas sync');
+    }
+
+    // HTTP mode: one shared process serves many clients over Streamable HTTP.
+    // Each client session gets its own MCP server via createMcpServer. The MCP
+    // endpoint listens on its own port (MCP_HTTP_PORT) so it stays reachable
+    // even when the canvas port is reused by another process.
+    if (resolveTransportMode(process.env) === 'http') {
+      const mcpPort = parseInt(process.env['MCP_HTTP_PORT'] || '3031', 10);
+      await startMcpHttpServer(createMcpServer, mcpPort);
+      logger.info(`Excalidraw MCP server running on HTTP (Streamable) at http://127.0.0.1:${mcpPort}/mcp`);
+
+      const shutdownHttp = async () => {
+        logger.info('Shutting down (HTTP mode)');
+        try { await stopCanvasServer(); } catch {}
+        try { closeDb(); } catch {}
+        process.exit(0);
+      };
+      process.on('SIGTERM', shutdownHttp);
+      process.on('SIGINT', shutdownHttp);
+      return;
     }
 
     const transport = new StdioServerTransport();
