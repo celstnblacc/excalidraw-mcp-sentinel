@@ -1810,7 +1810,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
 
         logger.info('Clearing canvas via MCP (user confirmed via token)');
 
-        const clearResponse = await fetch(`${EXPRESS_SERVER_URL}/api/elements/clear`, {
+        const clearResponse = await fetch(`${EXPRESS_SERVER_URL}/api/elements/clear?confirm=true`, {
           method: 'DELETE',
           headers: canvasHeaders()
         });
@@ -1953,7 +1953,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           const backupData = await backupResp.json() as ApiResponse;
           const backupElements = backupData.elements || [];
 
-          await fetch(`${EXPRESS_SERVER_URL}/api/elements/clear`, { method: 'DELETE', headers: canvasHeaders() });
+          const replaceClearResp = await fetch(`${EXPRESS_SERVER_URL}/api/elements/clear?confirm=true`, { method: 'DELETE', headers: canvasHeaders() });
+          if (!replaceClearResp.ok) {
+            throw new Error(`Failed to clear canvas before replace import: ${replaceClearResp.status} ${replaceClearResp.statusText}`);
+          }
 
           try {
             await batchCreateElementsOnCanvas(elementsToCreate);
@@ -2153,7 +2156,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         const backupData = await backupResp.json() as ApiResponse;
         const backupElements = backupData.elements || [];
 
-        await fetch(`${EXPRESS_SERVER_URL}/api/elements/clear`, { method: 'DELETE', headers: canvasHeaders() });
+        const snapshotClearResp = await fetch(`${EXPRESS_SERVER_URL}/api/elements/clear?confirm=true`, { method: 'DELETE', headers: canvasHeaders() });
+        if (!snapshotClearResp.ok) {
+          throw new Error(`Failed to clear canvas before snapshot restore: ${snapshotClearResp.status} ${snapshotClearResp.statusText}`);
+        }
 
         // Restore elements from snapshot
         try {
