@@ -5,6 +5,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+### Fixed
+- `clear_canvas`, `import_scene` (mode `replace`), and `restore_snapshot` MCP
+  tools silently failed to wipe the canvas because their internal `fetch()`
+  calls to `DELETE /api/elements/clear` did not include the `?confirm=true`
+  query parameter required by the `requireConfirm` security middleware
+  (introduced in v1.6.3, commit 55392350). The DELETE returned 400 and the
+  calling code either ignored the response (`import_scene`, `restore_snapshot`)
+  or surfaced a `Failed to clear canvas: 400 Bad Request` to the caller
+  (`clear_canvas` token-confirm step). After this fix, the three MCP tools
+  pass `?confirm=true` and `import_scene` / `restore_snapshot` also throw on
+  a non-OK clear response so the bug cannot regress silently.
+
 ## [1.1.0] - 2026-04-06
 
 ### Added
